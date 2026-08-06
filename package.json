@@ -1,0 +1,15 @@
+{
+  "name": "projectfinspiration",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "deploy": "astro build && wrangler deploy --keep-vars"
+  },
+  "dependencies": {
+    "@astrojs/cloudflare": "^14.2.0",
+    "astro": "^7.2.0"
+  }
+}

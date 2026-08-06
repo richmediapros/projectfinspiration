@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dev",
+      "runtimeExecutable": "C:\\Users\\richp\\AppData\\Roaming\\fnm\\node-versions\\v22.22.3\\installation\\node.exe",
+      "runtimeArgs": ["node_modules/astro/bin/astro.mjs", "dev"],
+      "port": 4321,
+      "autoPort": false
+    }
+  ]
+}
