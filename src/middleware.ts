@@ -6,6 +6,12 @@ import { SUPER_ADMIN_EMAIL, isLocalDev, getUserByEmail } from './lib/auth';
 const PUBLIC_PATHS = ['/login', '/', '/request-access'];
 const SKIP_PREFIXES = ['/_astro/', '/favicon'];
 
+function noCacheHeaders(response: Response): Response {
+  const newResponse = new Response(response.body, response);
+  newResponse.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  return newResponse;
+}
+
 export const onRequest = defineMiddleware(async (context, next) => {
   const { pathname } = context.url;
 
@@ -29,7 +35,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
       context.locals.userRole = 'super_admin';
       context.locals.userName = 'Admin';
     }
-    return next();
+    return noCacheHeaders(await next());
   }
 
   const token = getTokenFromRequest(context.request);
@@ -45,13 +51,13 @@ export const onRequest = defineMiddleware(async (context, next) => {
         context.locals.userName = user.name;
         context.locals.associationId = user.association_id ?? undefined;
         context.locals.associationName = user.association_name ?? undefined;
-        return next();
+        return noCacheHeaders(await next());
       }
     }
   }
 
   if (PUBLIC_PATHS.includes(pathname)) {
-    return next();
+    return noCacheHeaders(await next());
   }
 
   const returnTo = `?return_to=${encodeURIComponent(pathname)}`;
