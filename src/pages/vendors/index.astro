@@ -59,7 +59,7 @@ query += ` GROUP BY v.id ORDER BY v.name`;
 const vendors = (await db.prepare(query).bind(...binds).all<VendorRow>()).results;
 ---
 
-<Base title="Vendors | Finspiration">
+<Base title="Vendors | TrustConstellation">
   <div class="page-header">
     <h1>Vendors</h1>
     <a href="/vendors/new" class="btn btn-primary">Add Vendor</a>

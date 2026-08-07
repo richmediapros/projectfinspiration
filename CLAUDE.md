@@ -1,4 +1,4 @@
-# Project Finspiration
+# Project TrustConstellation
 
 ## Stack
 

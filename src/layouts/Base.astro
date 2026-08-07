@@ -1,12 +1,13 @@
 ---
 import '../styles/global.css';
+import ConstellationMark from '../components/ConstellationMark.astro';
 import { isAdmin } from '../lib/auth';
 
 interface Props {
   title?: string;
 }
 
-const { title = 'Finspiration' } = Astro.props;
+const { title = 'TrustConstellation' } = Astro.props;
 const showAdmin = isAdmin(Astro.locals);
 const userName = Astro.locals.userName || '';
 const associationName = Astro.locals.associationName || '';
@@ -45,8 +46,8 @@ const isActive = (href: string) => {
       <aside class="app-sidebar">
         <div class="sidebar-brand">
           <a href="/dashboard">
-            <span class="brand-icon">F</span>
-            <span class="brand-text">Finspiration</span>
+            <ConstellationMark size={28} />
+            <span class="brand-text"><span class="brand-light">Trust</span>Constellation</span>
           </a>
         </div>
 
@@ -122,7 +123,7 @@ const isActive = (href: string) => {
       </aside>
 
       <div class="mobile-header">
-        <a href="/dashboard" class="mobile-brand">Finspiration</a>
+        <a href="/dashboard" class="mobile-brand"><span class="brand-light">Trust</span>Constellation</a>
         <button type="button" class="mobile-menu-btn" data-mobile-toggle aria-label="Open menu">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         </button>
@@ -148,23 +149,14 @@ const isActive = (href: string) => {
         text-decoration: none;
       }
       .sidebar-brand a:hover { color: var(--text); }
-      .brand-icon {
-        width: 32px;
-        height: 32px;
-        background: var(--accent);
-        color: var(--on-accent);
-        border-radius: var(--radius-md);
-        display: grid;
-        place-items: center;
-        font-family: var(--font-heading);
-        font-weight: 700;
-        font-size: 1rem;
-      }
       .brand-text {
         font-family: var(--font-heading);
         font-weight: 700;
         font-size: 1.05rem;
         letter-spacing: -0.02em;
+      }
+      .brand-light {
+        font-weight: 400;
       }
 
       .sidebar-nav {

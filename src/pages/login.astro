@@ -1,5 +1,6 @@
 ---
 import '../styles/global.css';
+import ConstellationMark from '../components/ConstellationMark.astro';
 import { env } from 'cloudflare:workers';
 import { SUPER_ADMIN_EMAIL, getUserByEmail } from '../lib/auth';
 import { createSession, makeSessionCookie } from '../lib/session';
@@ -135,14 +136,14 @@ if (Astro.request.method === 'POST') {
         }
       })();
     </script>
-    <title>Sign In | Finspiration</title>
+    <title>Sign In | TrustConstellation</title>
   </head>
   <body>
     <div class="login-page">
       <div class="login-card">
         <div class="login-brand">
-          <span class="login-brand-icon">F</span>
-          <span class="login-brand-text">Finspiration</span>
+          <ConstellationMark size={28} />
+          <span class="login-brand-text"><span class="login-brand-light">Trust</span>Constellation</span>
         </div>
 
         {step === 'login' && (
@@ -224,24 +225,15 @@ if (Astro.request.method === 'POST') {
         gap: 0.5rem;
         margin-bottom: 1.5rem;
       }
-      .login-brand-icon {
-        width: 32px;
-        height: 32px;
-        background: var(--accent);
-        color: var(--on-accent);
-        border-radius: var(--radius-md);
-        display: grid;
-        place-items: center;
-        font-family: var(--font-heading);
-        font-weight: 700;
-        font-size: 1rem;
-      }
       .login-brand-text {
         font-family: var(--font-heading);
         font-weight: 700;
         font-size: 1.15rem;
         color: var(--text);
         letter-spacing: -0.02em;
+      }
+      .login-brand-light {
+        font-weight: 400;
       }
       .login-sub {
         color: var(--text-secondary);

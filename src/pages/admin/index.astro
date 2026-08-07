@@ -14,7 +14,7 @@ const vendorCount = await db.prepare('SELECT COUNT(*) as count FROM vendors').fi
 const pendingCount = await db.prepare("SELECT COUNT(*) as count FROM access_requests WHERE status = 'pending'").first<{ count: number }>();
 ---
 
-<Base title="Admin | Finspiration">
+<Base title="Admin | TrustConstellation">
   <div class="page-header">
     <div class="overline">Admin</div>
     <h1>Overview</h1>

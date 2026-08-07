@@ -1,4 +1,4 @@
--- Finspiration schema
+-- TrustConstellation schema
 
 CREATE TABLE associations (
   id TEXT PRIMARY KEY,
