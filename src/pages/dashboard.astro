@@ -1,0 +1,238 @@
+---
+import Base from '../layouts/Base.astro';
+import { isAdmin } from '../lib/auth';
+import { env } from 'cloudflare:workers';
+
+const db = env.DB;
+const userName = Astro.locals.userName || 'there';
+const associationName = Astro.locals.associationName;
+const admin = isAdmin(Astro.locals);
+
+const vendorCount = await db.prepare('SELECT COUNT(*) as count FROM vendors').first<{ count: number }>();
+const categoryCount = await db.prepare('SELECT COUNT(*) as count FROM categories').first<{ count: number }>();
+
+interface RecentVendor {
+  id: string;
+  name: string;
+  logo_url: string | null;
+  category_names: string | null;
+  created_at: string;
+}
+
+const recentVendors = (await db
+  .prepare(`
+    SELECT v.id, v.name, v.logo_url, v.created_at,
+      GROUP_CONCAT(DISTINCT c.name) as category_names
+    FROM vendors v
+    LEFT JOIN vendor_categories vc ON vc.vendor_id = v.id
+    LEFT JOIN categories c ON c.id = vc.category_id
+    GROUP BY v.id
+    ORDER BY v.created_at DESC
+    LIMIT 5
+  `)
+  .all<RecentVendor>()).results;
+
+let myRatings = 0;
+if (Astro.locals.userId) {
+  const row = await db.prepare('SELECT COUNT(*) as count FROM ratings WHERE user_id = ?')
+    .bind(Astro.locals.userId).first<{ count: number }>();
+  myRatings = row?.count ?? 0;
+}
+
+let myNotes = 0;
+if (Astro.locals.userId) {
+  const row = await db.prepare('SELECT COUNT(*) as count FROM notes WHERE user_id = ?')
+    .bind(Astro.locals.userId).first<{ count: number }>();
+  myNotes = row?.count ?? 0;
+}
+---
+
+<Base title="Dashboard | Finspiration">
+  <div class="page-header">
+    <h1>Welcome back, {userName}.</h1>
+    {associationName && <p class="description">{associationName}</p>}
+  </div>
+
+  <div class="stat-row">
+    <div class="stat-card">
+      <div class="stat-value">{vendorCount?.count ?? 0}</div>
+      <div class="stat-label">Vendors</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">{categoryCount?.count ?? 0}</div>
+      <div class="stat-label">Categories</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">{myRatings}</div>
+      <div class="stat-label">Your Ratings</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">{myNotes}</div>
+      <div class="stat-label">Your Notes</div>
+    </div>
+  </div>
+
+  <div class="dash-sections">
+    <div class="dash-main">
+      <div class="section-card">
+        <div class="section-header">
+          <h2>Recent Vendors</h2>
+          <a href="/vendors" class="btn btn-ghost btn-sm">View all</a>
+        </div>
+        {recentVendors.length === 0 ? (
+          <p class="empty-sm">No vendors yet. <a href="/vendors/new">Add the first one</a>.</p>
+        ) : (
+          <div class="recent-list">
+            {recentVendors.map((v) => (
+              <a href={`/vendors/${v.id}`} class="recent-row">
+                {v.logo_url ? (
+                  <img src={v.logo_url} alt="" class="recent-logo" />
+                ) : (
+                  <div class="recent-logo-placeholder">{v.name.charAt(0)}</div>
+                )}
+                <div class="recent-info">
+                  <div class="recent-name">{v.name}</div>
+                  {v.category_names && (
+                    <div class="recent-cats">
+                      {v.category_names.split(',').map((cat) => (
+                        <span class="badge badge-neutral">{cat}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <span class="recent-date">{new Date(v.created_at + 'Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+
+    <div class="dash-side">
+      <div class="section-card">
+        <h2>Quick Links</h2>
+        <div class="quick-links">
+          <a href="/vendors/new" class="quick-link">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add Vendor
+          </a>
+          <a href="/vendors" class="quick-link">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            Browse Vendors
+          </a>
+          <a href="/account" class="quick-link">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            Account
+          </a>
+          {admin && (
+            <a href="/admin" class="quick-link">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+              Admin
+            </a>
+          )}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    .dash-sections {
+      display: grid;
+      grid-template-columns: 1fr 260px;
+      gap: 1.25rem;
+      align-items: start;
+    }
+    @media (max-width: 768px) {
+      .dash-sections { grid-template-columns: 1fr; }
+    }
+    .section-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem;
+    }
+    .section-card h2 {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary);
+      margin-bottom: 0.75rem;
+    }
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .section-header h2 { margin-bottom: 0; }
+    .section-header .btn-sm {
+      font-size: 0.78rem;
+      padding: 0.3rem 0.6rem;
+    }
+    .btn-sm { font-size: 0.78rem; padding: 0.3rem 0.6rem; }
+    .empty-sm {
+      color: var(--muted);
+      font-size: 0.85rem;
+      font-style: italic;
+      margin-top: 0.5rem;
+    }
+    .empty-sm a { color: var(--accent); }
+    .recent-list {
+      display: flex;
+      flex-direction: column;
+      margin-top: 0.75rem;
+    }
+    .recent-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.6rem 0.5rem;
+      border-radius: var(--radius-md);
+      color: inherit;
+      transition: background 0.1s ease;
+    }
+    .recent-row:hover { background: var(--surface-raised); color: inherit; }
+    .recent-logo {
+      width: 32px;
+      height: 32px;
+      border-radius: var(--radius-sm);
+      object-fit: contain;
+      background: var(--surface-raised);
+      flex-shrink: 0;
+    }
+    .recent-logo-placeholder {
+      width: 32px;
+      height: 32px;
+      border-radius: var(--radius-sm);
+      background: var(--accent-muted);
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.85rem;
+      flex-shrink: 0;
+    }
+    .recent-name { font-weight: 500; font-size: 0.88rem; margin-bottom: 0.1rem; }
+    .recent-cats { display: flex; gap: 0.2rem; }
+    .recent-cats .badge { font-size: 0.58rem; }
+    .recent-date { font-size: 0.75rem; color: var(--muted); margin-left: auto; white-space: nowrap; }
+    .quick-links {
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+    }
+    .quick-link {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 0.6rem;
+      border-radius: var(--radius-md);
+      font-size: 0.88rem;
+      font-weight: 500;
+      color: var(--text);
+      transition: background 0.1s ease;
+    }
+    .quick-link:hover { background: var(--surface-raised); color: var(--text); }
+    .quick-link svg { color: var(--muted); }
+  </style>
+</Base>

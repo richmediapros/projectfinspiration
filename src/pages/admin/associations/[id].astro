@@ -1,0 +1,156 @@
+---
+import Base from '../../../layouts/Base.astro';
+import { requireAdmin } from '../../../lib/auth';
+import { env } from 'cloudflare:workers';
+
+const forbidden = requireAdmin(Astro);
+if (forbidden) return forbidden;
+
+const db = env.DB;
+const { id } = Astro.params;
+let error = '';
+let success = '';
+
+interface Association {
+  id: string;
+  name: string;
+  abbreviation: string | null;
+  state: string | null;
+  member_term: string;
+}
+
+let association = await db
+  .prepare('SELECT * FROM associations WHERE id = ?')
+  .bind(id)
+  .first<Association>();
+
+if (!association) {
+  return new Response('Not found', { status: 404 });
+}
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = String(form.get('action') ?? '');
+
+  if (action === 'update') {
+    const name = String(form.get('name') ?? '').trim();
+    const abbreviation = String(form.get('abbreviation') ?? '').trim();
+    const state = String(form.get('state') ?? '').trim();
+    const memberTerm = String(form.get('member_term') ?? '').trim() || 'Associate Member';
+
+    if (!name) {
+      error = 'Association name is required.';
+    } else {
+      await db
+        .prepare('UPDATE associations SET name = ?, abbreviation = ?, state = ?, member_term = ? WHERE id = ?')
+        .bind(name, abbreviation || null, state || null, memberTerm, id)
+        .run();
+      association = { ...association, name, abbreviation: abbreviation || null, state: state || null, member_term: memberTerm };
+      success = 'Association updated.';
+    }
+  } else if (action === 'delete') {
+    const userCount = await db
+      .prepare('SELECT COUNT(*) as count FROM users WHERE association_id = ?')
+      .bind(id)
+      .first<{ count: number }>();
+
+    if (userCount && userCount.count > 0) {
+      error = `Cannot delete: ${userCount.count} user(s) belong to this association. Reassign them first.`;
+    } else {
+      await db.prepare('DELETE FROM associations WHERE id = ?').bind(id).run();
+      return new Response(null, { status: 302, headers: { Location: '/admin/associations' } });
+    }
+  }
+}
+---
+
+<Base title={`${association.name} | Admin | Finspiration`}>
+  <div class="page-header">
+    <div class="overline"><a href="/admin/associations">Associations</a></div>
+    <h1>{association.name}</h1>
+  </div>
+
+  {error && <div class="alert alert-error">{error}</div>}
+  {success && <div class="alert alert-success">{success}</div>}
+
+  <div class="edit-card">
+    <form method="POST">
+      <input type="hidden" name="action" value="update" />
+      <div class="form-row">
+        <div class="form-group" style="flex: 2">
+          <label for="name">Name <span class="required">*</span></label>
+          <input type="text" id="name" name="name" value={association.name} required />
+        </div>
+        <div class="form-group" style="max-width: 120px">
+          <label for="abbreviation">Abbreviation</label>
+          <input type="text" id="abbreviation" name="abbreviation" value={association.abbreviation ?? ''} />
+        </div>
+        <div class="form-group" style="max-width: 80px">
+          <label for="state">State</label>
+          <input type="text" id="state" name="state" value={association.state ?? ''} maxlength="2" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="member_term">Vendor membership term</label>
+        <input type="text" id="member_term" name="member_term" value={association.member_term} />
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+        <a href="/admin/associations" class="btn btn-secondary">Cancel</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="danger-zone">
+    <h3>Danger Zone</h3>
+    <form method="POST" onsubmit="return confirm('Are you sure you want to delete this association?')">
+      <input type="hidden" name="action" value="delete" />
+      <p>Permanently delete this association. This cannot be undone.</p>
+      <button type="submit" class="btn btn-danger">Delete Association</button>
+    </form>
+  </div>
+
+  <style>
+    .edit-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem;
+      max-width: 640px;
+      margin-bottom: 2rem;
+    }
+    .form-row {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .form-row .form-group { flex: 1; min-width: 0; }
+    .form-actions {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+    .overline a {
+      color: var(--muted);
+      transition: color 0.12s ease;
+    }
+    .overline a:hover { color: var(--accent); }
+    .danger-zone {
+      max-width: 640px;
+      border: 1px solid var(--error-border);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem 1.5rem;
+      background: var(--error-bg);
+    }
+    .danger-zone h3 {
+      font-size: 0.9rem;
+      color: var(--error-text);
+      margin-bottom: 0.35rem;
+    }
+    .danger-zone p {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      margin: 0 0 0.75rem;
+    }
+  </style>
+</Base>

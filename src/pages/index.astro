@@ -1,62 +1,144 @@
 ---
 import Public from '../layouts/Public.astro';
 ---
-<Public title="Finspiration – Vendor Intelligence for Banking">
+
+<Public title="Finspiration — Vendor Intelligence for Banking Associations">
   <section class="hero">
-    <div class="hero-glow"></div>
     <div class="hero-inner">
-      <span class="hero-badge">Built for State Banking Associations</span>
-      <h1>Vendor intelligence, built for your association</h1>
+      <div class="hero-badge">For State Banking Associations</div>
+      <h1>Shared vendor intelligence,<br />stronger decisions.</h1>
       <p class="hero-sub">
-        One place to track, compare, and evaluate fintech vendors across your
-        entire association. Real data. Real feedback. No more spreadsheets.
+        Finspiration helps state banking associations share vendor information,
+        ratings, and endorsements — so you can make better decisions together.
       </p>
       <div class="hero-actions">
-        <a href="/login" class="btn btn-primary btn-lg">Get Started</a>
-        <a href="#how" class="btn btn-ghost btn-lg">See how it works &darr;</a>
-      </div>
-    </div>
-    <div class="hero-ticker">
-      <div class="ticker-item">
-        <span class="ticker-num">390+</span>
-        <span class="ticker-label">Vendors tracked</span>
-      </div>
-      <div class="ticker-item">
-        <span class="ticker-num">1</span>
-        <span class="ticker-label">Association</span>
+        <a href="/login" class="btn btn-primary btn-lg">Sign in</a>
+        <a href="/request-access" class="btn btn-secondary btn-lg">Request access</a>
       </div>
     </div>
   </section>
 
-  <section id="how" class="how">
-    <h2>How it works</h2>
-    <ol class="steps">
-      <li class="step">
-        <span class="step-num">01</span>
-        <div>
-          <h3>Your association signs up</h3>
-          <p>We onboard your team and import your existing vendor roster — contracts, contacts, categories, all of it.</p>
+  <section class="features">
+    <div class="features-inner">
+      <div class="feature-cards">
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+          </div>
+          <h3>Vendor Directory</h3>
+          <p>Browse vendors across categories. See who other associations work with and what they think.</p>
         </div>
-      </li>
-      <li class="step">
-        <span class="step-num">02</span>
-        <div>
-          <h3>Members start reviewing</h3>
-          <p>Bank members log in and leave structured feedback on the vendors they use. Ratings, comments, deal-breakers.</p>
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3H14z"/><path d="M7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/></svg>
+          </div>
+          <h3>Ratings &amp; Notes</h3>
+          <p>Share honest feedback with thumbs up, down, or neutral ratings. Add notes visible to all members.</p>
         </div>
-      </li>
-      <li class="step">
-        <span class="step-num">03</span>
-        <div>
-          <h3>Insights surface automatically</h3>
-          <p>See which vendors are trending, which are flagged, and how your association's choices compare to peers.</p>
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <h3>Endorsement Tracking</h3>
+          <p>See which associations endorse a vendor and which have them as members — at a glance.</p>
         </div>
-      </li>
-    </ol>
+      </div>
+    </div>
   </section>
 
-  <section class="cta-band">
-    <p>Ready to give your members better vendor intelligence?</p>
-    <a href="/login" class="btn btn-primary btn-lg">Get Started</a>
-  </section>
+  <style>
+    .hero {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 5rem 1.5rem 3rem;
+    }
+    .hero-inner {
+      max-width: 640px;
+      text-align: center;
+    }
+    .hero-badge {
+      display: inline-block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      background: var(--accent-muted);
+      border: 1px solid var(--accent-border);
+      border-radius: 999px;
+      padding: 0.3rem 0.85rem;
+      margin-bottom: 1.25rem;
+    }
+    .hero h1 {
+      font-size: clamp(2rem, 5vw, 2.75rem);
+      line-height: 1.15;
+      margin: 0 0 1rem;
+      letter-spacing: -0.03em;
+    }
+    .hero-sub {
+      color: var(--text-secondary);
+      font-size: 1.05rem;
+      line-height: 1.6;
+      margin: 0 0 2rem;
+    }
+    .hero-actions {
+      display: flex;
+      gap: 0.75rem;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .btn-lg {
+      padding: 0.65rem 1.5rem;
+      font-size: 0.95rem;
+    }
+    .features {
+      padding: 0 1.5rem 4rem;
+    }
+    .features-inner {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .feature-cards {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+    }
+    .feature-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem;
+      transition: border-color 0.15s ease;
+    }
+    .feature-card:hover {
+      border-color: var(--border-hover);
+    }
+    .feature-icon {
+      width: 40px;
+      height: 40px;
+      background: var(--accent-muted);
+      border-radius: var(--radius-md);
+      display: grid;
+      place-items: center;
+      color: var(--accent);
+      margin-bottom: 1rem;
+    }
+    .feature-card h3 {
+      font-size: 1rem;
+      margin-bottom: 0.35rem;
+    }
+    .feature-card p {
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+      margin: 0;
+      line-height: 1.5;
+    }
+    @media (max-width: 700px) {
+      .feature-cards {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
 </Public>

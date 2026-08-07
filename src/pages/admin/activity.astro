@@ -1,0 +1,130 @@
+---
+import Base from '../../layouts/Base.astro';
+import { requireAdmin } from '../../lib/auth';
+import { env } from 'cloudflare:workers';
+import { getActivityEvents, activityLabel } from '../../lib/activity';
+
+const forbidden = requireAdmin(Astro);
+if (forbidden) return forbidden;
+
+const db = env.DB;
+const filter = Astro.url.searchParams.get('type') ?? '';
+
+let events;
+if (filter) {
+  events = (await db
+    .prepare('SELECT * FROM activity_log WHERE event_type = ? ORDER BY created_at DESC LIMIT 100')
+    .bind(filter)
+    .all<import('../../lib/activity').ActivityEvent>()).results;
+} else {
+  events = await getActivityEvents(db, 100);
+}
+
+const eventTypes = [
+  'login', 'login_failed', 'logout', 'password_set',
+  'account_locked', 'user_created', 'user_updated',
+  'association_created', 'vendor_created', 'access_request',
+];
+---
+
+<Base title="Activity Log | Admin | Finspiration">
+  <div class="page-header">
+    <div class="overline">Admin</div>
+    <h1>Activity Log</h1>
+  </div>
+
+  <form method="GET" class="filter-bar">
+    <select name="type">
+      <option value="">All events</option>
+      {eventTypes.map((t) => (
+        <option value={t} selected={t === filter}>{activityLabel(t)}</option>
+      ))}
+    </select>
+    <button type="submit" class="btn btn-secondary">Filter</button>
+    {filter && <a href="/admin/activity" class="btn btn-ghost">Clear</a>}
+  </form>
+
+  {events.length === 0 ? (
+    <p class="empty">No activity recorded yet.</p>
+  ) : (
+    <div class="activity-list">
+      {events.map((e) => (
+        <div class="activity-row">
+          <div class="activity-type">
+            <span class={`activity-dot ${e.event_type.includes('fail') || e.event_type.includes('locked') ? 'dot-error' : e.event_type.includes('created') ? 'dot-success' : ''}`}></span>
+            {activityLabel(e.event_type)}
+          </div>
+          <div class="activity-who">{e.email ?? '—'}</div>
+          {e.details && <div class="activity-detail">{e.details}</div>}
+          <div class="activity-time">
+            {new Date(e.created_at + 'Z').toLocaleString('en-US', {
+              month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  )}
+
+  <style>
+    .filter-bar {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+    .filter-bar select { min-width: 180px; }
+    .activity-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+    .activity-row {
+      display: grid;
+      grid-template-columns: 180px 1fr auto;
+      gap: 0.75rem;
+      align-items: center;
+      padding: 0.6rem 1rem;
+      background: var(--surface);
+      font-size: 0.85rem;
+    }
+    @media (max-width: 640px) {
+      .activity-row {
+        grid-template-columns: 1fr;
+        gap: 0.15rem;
+      }
+    }
+    .activity-type {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: 500;
+    }
+    .activity-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+    }
+    .activity-dot.dot-error { background: var(--error-text); }
+    .activity-dot.dot-success { background: var(--success-text); }
+    .activity-who { color: var(--text-secondary); }
+    .activity-detail {
+      color: var(--muted);
+      font-size: 0.8rem;
+      grid-column: 1 / -1;
+      padding-left: 1.6rem;
+    }
+    .activity-time {
+      color: var(--muted);
+      font-size: 0.78rem;
+      white-space: nowrap;
+      text-align: right;
+    }
+  </style>
+</Base>

@@ -1,0 +1,466 @@
+---
+import Base from '../../layouts/Base.astro';
+import { isAdmin } from '../../lib/auth';
+import { env } from 'cloudflare:workers';
+
+const db = env.DB;
+const { id } = Astro.params;
+
+interface Vendor {
+  id: string;
+  name: string;
+  logo_url: string | null;
+  website: string | null;
+  description: string | null;
+  contact_name: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  creator_name: string | null;
+}
+
+const vendor = await db
+  .prepare(`
+    SELECT v.*, u.name as creator_name
+    FROM vendors v
+    LEFT JOIN users u ON u.id = v.created_by
+    WHERE v.id = ?
+  `)
+  .bind(id)
+  .first<Vendor>();
+
+if (!vendor) return new Response('Not found', { status: 404 });
+
+interface CategoryRow { id: string; name: string; }
+const vendorCategories = (await db
+  .prepare('SELECT c.id, c.name FROM categories c JOIN vendor_categories vc ON vc.category_id = c.id WHERE vc.vendor_id = ?')
+  .bind(id)
+  .all<CategoryRow>()).results;
+
+interface RatingAgg { rating: string; count: number; }
+const ratingRows = (await db
+  .prepare('SELECT rating, COUNT(*) as count FROM ratings WHERE vendor_id = ? GROUP BY rating')
+  .bind(id)
+  .all<RatingAgg>()).results;
+
+const ratings = { up: 0, down: 0, neutral: 0 };
+for (const r of ratingRows) {
+  if (r.rating in ratings) ratings[r.rating as keyof typeof ratings] = r.count;
+}
+
+interface UserRating { rating: string; }
+const userRating = Astro.locals.userId
+  ? await db.prepare('SELECT rating FROM ratings WHERE user_id = ? AND vendor_id = ?')
+      .bind(Astro.locals.userId, id).first<UserRating>()
+  : null;
+
+interface NoteRow {
+  id: string;
+  content: string;
+  created_at: string;
+  user_name: string;
+  association_name: string | null;
+}
+
+const notes = (await db
+  .prepare(`
+    SELECT n.id, n.content, n.created_at, u.name as user_name, a.name as association_name
+    FROM notes n
+    JOIN users u ON u.id = n.user_id
+    LEFT JOIN associations a ON a.id = u.association_id
+    WHERE n.vendor_id = ?
+    ORDER BY n.created_at DESC
+  `)
+  .bind(id)
+  .all<NoteRow>()).results;
+
+interface VendorAssoc {
+  association_name: string;
+  relationship_type: string;
+  member_term: string;
+}
+
+const vendorAssociations = (await db
+  .prepare(`
+    SELECT a.name as association_name, va.relationship_type, a.member_term
+    FROM vendor_associations va
+    JOIN associations a ON a.id = va.association_id
+    WHERE va.vendor_id = ?
+    ORDER BY a.name
+  `)
+  .bind(id)
+  .all<VendorAssoc>()).results;
+
+interface MyAssoc {
+  member_term: string;
+}
+
+const myAssociation = Astro.locals.associationId
+  ? await db.prepare('SELECT member_term FROM associations WHERE id = ?')
+      .bind(Astro.locals.associationId).first<MyAssoc>()
+  : null;
+
+const myRels = Astro.locals.associationId
+  ? new Set(
+      (await db.prepare('SELECT relationship_type FROM vendor_associations WHERE vendor_id = ? AND association_id = ?')
+        .bind(id, Astro.locals.associationId).all<{ relationship_type: string }>())
+        .results.map((r) => r.relationship_type)
+    )
+  : new Set<string>();
+---
+
+<Base title={`${vendor.name} | Finspiration`}>
+  <div class="vendor-detail">
+    <div class="vendor-header">
+      <div class="vendor-header-left">
+        {vendor.logo_url ? (
+          <img src={vendor.logo_url} alt="" class="vendor-logo" />
+        ) : (
+          <div class="vendor-logo-placeholder">{vendor.name.charAt(0)}</div>
+        )}
+        <div>
+          <h1>{vendor.name}</h1>
+          <div class="vendor-meta">
+            {vendorCategories.length > 0 && (
+              <div class="vendor-cats">
+                {vendorCategories.map((c) => (
+                  <span class="badge badge-neutral">{c.name}</span>
+                ))}
+              </div>
+            )}
+            {vendor.website && (
+              <a href={vendor.website.startsWith('http') ? vendor.website : `https://${vendor.website}`} target="_blank" rel="noopener" class="vendor-website">
+                {new URL(vendor.website.startsWith('http') ? vendor.website : `https://${vendor.website}`).hostname}
+              </a>
+            )}
+          </div>
+        </div>
+      </div>
+      <div class="vendor-header-actions">
+        <a href={`/vendors/${id}/edit`} class="btn btn-secondary">Edit</a>
+      </div>
+    </div>
+
+    {vendor.description && <p class="vendor-description">{vendor.description}</p>}
+
+    <div class="vendor-columns">
+      <div class="vendor-main">
+        <!-- Ratings -->
+        <div class="section-card">
+          <h2>Ratings</h2>
+          <div class="rating-bar">
+            <form method="POST" action={`/api/vendors/${id}/rate`}>
+              <input type="hidden" name="rating" value="up" />
+              <button type="submit" class={`rating-btn up ${userRating?.rating === 'up' ? 'active' : ''}`}>
+                &#9650; {ratings.up}
+              </button>
+            </form>
+            <form method="POST" action={`/api/vendors/${id}/rate`}>
+              <input type="hidden" name="rating" value="neutral" />
+              <button type="submit" class={`rating-btn neutral ${userRating?.rating === 'neutral' ? 'active' : ''}`}>
+                &#9644; {ratings.neutral}
+              </button>
+            </form>
+            <form method="POST" action={`/api/vendors/${id}/rate`}>
+              <input type="hidden" name="rating" value="down" />
+              <button type="submit" class={`rating-btn down ${userRating?.rating === 'down' ? 'active' : ''}`}>
+                &#9660; {ratings.down}
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Notes -->
+        <div class="section-card">
+          <h2>Notes ({notes.length})</h2>
+          <form method="POST" action={`/api/vendors/${id}/notes`} class="note-form">
+            <textarea name="content" rows="2" placeholder="Add a note visible to all users..." required></textarea>
+            <button type="submit" class="btn btn-primary btn-sm">Post Note</button>
+          </form>
+          {notes.length > 0 && (
+            <div class="notes-list">
+              {notes.map((n) => (
+                <div class="note">
+                  <div class="note-header">
+                    <span class="note-author">{n.user_name}</span>
+                    {n.association_name && <span class="note-org">{n.association_name}</span>}
+                    <span class="note-date">{new Date(n.created_at + 'Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                  </div>
+                  <p class="note-content">{n.content}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div class="vendor-sidebar">
+        <!-- Your Association -->
+        {Astro.locals.associationId && myAssociation && (
+          <div class="section-card">
+            <h2>Your Association</h2>
+            <p class="your-assoc-name">{Astro.locals.associationName}</p>
+            <div class="rel-toggles">
+              <form method="POST" action={`/api/vendors/${id}/relationships`}>
+                <input type="hidden" name="relationship_type" value="member" />
+                <button type="submit" class={`rel-toggle ${myRels.has('member') ? 'active' : ''}`}>
+                  <span class="rel-toggle-check">{myRels.has('member') ? '✓' : ''}</span>
+                  {myAssociation.member_term}
+                </button>
+              </form>
+              <form method="POST" action={`/api/vendors/${id}/relationships`}>
+                <input type="hidden" name="relationship_type" value="endorsed" />
+                <button type="submit" class={`rel-toggle endorsed ${myRels.has('endorsed') ? 'active' : ''}`}>
+                  <span class="rel-toggle-check">{myRels.has('endorsed') ? '✓' : ''}</span>
+                  Endorsed
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+
+        <!-- All Association Relationships -->
+        <div class="section-card">
+          <h2>Associations</h2>
+          {vendorAssociations.length === 0 ? (
+            <p class="empty-sm">No associations linked yet.</p>
+          ) : (
+            <div class="assoc-rel-list">
+              {vendorAssociations.map((va) => (
+                <div class="assoc-rel-row">
+                  <span class="assoc-rel-name">{va.association_name}</span>
+                  <span class={`badge ${va.relationship_type === 'endorsed' ? 'badge-accent' : 'badge-neutral'}`}>
+                    {va.relationship_type === 'member' ? va.member_term : 'Endorsed'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <!-- Contact -->
+        {(vendor.contact_name || vendor.contact_email || vendor.contact_phone) && (
+          <div class="section-card">
+            <h2>Contact</h2>
+            {vendor.contact_name && <div class="contact-line">{vendor.contact_name}</div>}
+            {vendor.contact_email && <div class="contact-line"><a href={`mailto:${vendor.contact_email}`}>{vendor.contact_email}</a></div>}
+            {vendor.contact_phone && <div class="contact-line">{vendor.contact_phone}</div>}
+          </div>
+        )}
+
+        <!-- Meta -->
+        <div class="section-card meta-card">
+          {vendor.creator_name && <div class="meta-line">Added by {vendor.creator_name}</div>}
+          <div class="meta-line">{new Date(vendor.created_at + 'Z').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    .vendor-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+    .vendor-header-left {
+      display: flex;
+      gap: 1rem;
+      align-items: flex-start;
+    }
+    .vendor-logo {
+      width: 56px;
+      height: 56px;
+      border-radius: var(--radius-md);
+      object-fit: contain;
+      background: var(--surface-raised);
+      flex-shrink: 0;
+    }
+    .vendor-logo-placeholder {
+      width: 56px;
+      height: 56px;
+      border-radius: var(--radius-md);
+      background: var(--accent-muted);
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 1.4rem;
+      flex-shrink: 0;
+    }
+    .vendor-header h1 {
+      font-size: 1.4rem;
+      margin-bottom: 0.15rem;
+    }
+    .vendor-meta {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .vendor-cats { display: flex; gap: 0.25rem; }
+    .vendor-website {
+      font-size: 0.82rem;
+      color: var(--accent);
+    }
+    .vendor-description {
+      font-size: 0.92rem;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      margin: 0 0 1.5rem;
+    }
+    .vendor-columns {
+      display: grid;
+      grid-template-columns: 1fr 300px;
+      gap: 1.25rem;
+      align-items: start;
+    }
+    @media (max-width: 768px) {
+      .vendor-columns { grid-template-columns: 1fr; }
+    }
+    .section-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+    }
+    .section-card h2 {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary);
+      margin-bottom: 0.75rem;
+    }
+    .rating-bar {
+      display: flex;
+      gap: 0.5rem;
+    }
+    .rating-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.5rem 1rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--surface-raised);
+      color: var(--text);
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.12s ease;
+    }
+    .rating-btn:hover { border-color: var(--border-hover); }
+    .rating-btn.up.active { background: var(--success-bg); border-color: var(--success-border); color: var(--success-text); }
+    .rating-btn.neutral.active { background: var(--accent-muted); border-color: var(--accent-border); color: var(--accent); }
+    .rating-btn.down.active { background: var(--error-bg); border-color: var(--error-border); color: var(--error-text); }
+    .note-form {
+      margin-bottom: 1rem;
+    }
+    .note-form textarea {
+      margin-bottom: 0.5rem;
+    }
+    .btn-sm { font-size: 0.8rem; padding: 0.35rem 0.75rem; }
+    .notes-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .note {
+      padding: 0.75rem;
+      background: var(--surface-raised);
+      border-radius: var(--radius-md);
+    }
+    .note-header {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      margin-bottom: 0.35rem;
+      font-size: 0.78rem;
+      flex-wrap: wrap;
+    }
+    .note-author { font-weight: 600; color: var(--text); }
+    .note-org { color: var(--muted); }
+    .note-date { color: var(--muted); margin-left: auto; }
+    .note-content {
+      font-size: 0.88rem;
+      color: var(--text-secondary);
+      margin: 0;
+      line-height: 1.5;
+    }
+    .empty-sm {
+      color: var(--muted);
+      font-size: 0.85rem;
+      font-style: italic;
+    }
+    .assoc-rel-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .assoc-rel-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.85rem;
+    }
+    .assoc-rel-name { font-weight: 500; }
+    .contact-line {
+      font-size: 0.88rem;
+      margin-bottom: 0.3rem;
+    }
+    .contact-line a { color: var(--accent); }
+    .meta-card {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    .meta-line { margin-bottom: 0.15rem; }
+    .your-assoc-name {
+      font-weight: 600;
+      font-size: 0.88rem;
+      margin: 0 0 0.6rem;
+    }
+    .rel-toggles {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .rel-toggle {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.55rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--surface-raised);
+      color: var(--text);
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.12s ease;
+    }
+    .rel-toggle:hover { border-color: var(--border-hover); }
+    .rel-toggle.active {
+      background: var(--success-bg);
+      border-color: var(--success-border);
+      color: var(--success-text);
+    }
+    .rel-toggle.endorsed.active {
+      background: var(--accent-muted);
+      border-color: var(--accent-border);
+      color: var(--accent);
+    }
+    .rel-toggle-check {
+      width: 16px;
+      text-align: center;
+      font-size: 0.75rem;
+    }
+  </style>
+</Base>

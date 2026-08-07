@@ -1,10 +1,12 @@
 {
   "name": "projectfinspiration",
-  "main": "./dist/_worker.js",
   "compatibility_date": "2025-04-01",
   "compatibility_flags": ["nodejs_compat"],
-  "assets": {
-    "directory": "./dist",
-    "binding": "ASSETS"
-  }
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "finspiration",
+      "database_id": "7ce21970-23ae-464e-96fc-b29e7e8630ea"
+    }
+  ]
 }

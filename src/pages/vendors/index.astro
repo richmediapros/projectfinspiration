@@ -1,0 +1,260 @@
+---
+import Base from '../../layouts/Base.astro';
+import { env } from 'cloudflare:workers';
+
+const db = env.DB;
+const url = Astro.url;
+const search = url.searchParams.get('q')?.trim() ?? '';
+const categoryFilter = url.searchParams.get('category') ?? '';
+
+interface Category {
+  id: string;
+  name: string;
+}
+
+const categories = (await db
+  .prepare('SELECT id, name FROM categories ORDER BY name')
+  .all<Category>()).results;
+
+interface VendorRow {
+  id: string;
+  name: string;
+  logo_url: string | null;
+  website: string | null;
+  description: string | null;
+  category_names: string | null;
+  thumbs_up: number;
+  thumbs_down: number;
+  neutral: number;
+  created_at: string;
+}
+
+let query = `
+  SELECT v.id, v.name, v.logo_url, v.website, v.description, v.created_at,
+    GROUP_CONCAT(DISTINCT c.name) as category_names,
+    COALESCE(SUM(CASE WHEN r.rating = 'up' THEN 1 ELSE 0 END), 0) as thumbs_up,
+    COALESCE(SUM(CASE WHEN r.rating = 'down' THEN 1 ELSE 0 END), 0) as thumbs_down,
+    COALESCE(SUM(CASE WHEN r.rating = 'neutral' THEN 1 ELSE 0 END), 0) as neutral
+  FROM vendors v
+  LEFT JOIN vendor_categories vc ON vc.vendor_id = v.id
+  LEFT JOIN categories c ON c.id = vc.category_id
+  LEFT JOIN ratings r ON r.vendor_id = v.id
+`;
+
+const binds: string[] = [];
+
+if (categoryFilter) {
+  query += ` WHERE v.id IN (SELECT vendor_id FROM vendor_categories WHERE category_id = ?)`;
+  binds.push(categoryFilter);
+}
+
+if (search) {
+  query += categoryFilter ? ' AND' : ' WHERE';
+  query += ` (v.name LIKE ? OR v.description LIKE ?)`;
+  binds.push(`%${search}%`, `%${search}%`);
+}
+
+query += ` GROUP BY v.id ORDER BY v.name`;
+
+const vendors = (await db.prepare(query).bind(...binds).all<VendorRow>()).results;
+---
+
+<Base title="Vendors | Finspiration">
+  <div class="page-header">
+    <h1>Vendors</h1>
+    <a href="/vendors/new" class="btn btn-primary">Add Vendor</a>
+  </div>
+
+  <form method="GET" class="filter-bar">
+    <div class="search-group">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" name="q" value={search} placeholder="Search vendors..." />
+    </div>
+    <select name="category">
+      <option value="">All categories</option>
+      {categories.map((c) => (
+        <option value={c.id} selected={c.id === categoryFilter}>{c.name}</option>
+      ))}
+    </select>
+    <button type="submit" class="btn btn-secondary">Filter</button>
+    {(search || categoryFilter) && <a href="/vendors" class="btn btn-ghost">Clear</a>}
+  </form>
+
+  {vendors.length === 0 ? (
+    <div class="empty-state">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+      <p>{search || categoryFilter ? 'No vendors match your filters.' : 'No vendors yet.'}</p>
+      <a href="/vendors/new" class="btn btn-primary">Add the first vendor</a>
+    </div>
+  ) : (
+    <div class="vendor-grid">
+      {vendors.map((v) => (
+        <a href={`/vendors/${v.id}`} class="vendor-card">
+          <div class="vendor-card-header">
+            {v.logo_url ? (
+              <img src={v.logo_url} alt="" class="vendor-logo" />
+            ) : (
+              <div class="vendor-logo-placeholder">{v.name.charAt(0)}</div>
+            )}
+            <div>
+              <div class="vendor-card-name">{v.name}</div>
+              {v.category_names && (
+                <div class="vendor-card-cats">
+                  {v.category_names.split(',').map((cat) => (
+                    <span class="badge badge-neutral">{cat}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          {v.description && (
+            <p class="vendor-card-desc">{v.description.length > 120 ? v.description.slice(0, 120) + '...' : v.description}</p>
+          )}
+          <div class="vendor-card-footer">
+            <div class="vendor-ratings">
+              <span class="rating-pill up" title="Thumbs up">&#9650; {v.thumbs_up}</span>
+              <span class="rating-pill down" title="Thumbs down">&#9660; {v.thumbs_down}</span>
+            </div>
+            {v.website && <span class="vendor-card-url">{new URL(v.website.startsWith('http') ? v.website : `https://${v.website}`).hostname}</span>}
+          </div>
+        </a>
+      ))}
+    </div>
+  )}
+
+  <style>
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    .filter-bar {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+    }
+    .search-group {
+      position: relative;
+      flex: 1;
+      min-width: 200px;
+      max-width: 320px;
+    }
+    .search-group svg {
+      position: absolute;
+      left: 0.75rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      pointer-events: none;
+    }
+    .search-group input {
+      padding-left: 2.25rem;
+      width: 100%;
+    }
+    .filter-bar select {
+      min-width: 160px;
+    }
+    .empty-state {
+      text-align: center;
+      padding: 4rem 1rem;
+      color: var(--muted);
+    }
+    .empty-state svg { margin-bottom: 1rem; }
+    .empty-state p { margin: 0 0 1.5rem; font-size: 0.95rem; }
+    .vendor-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
+      gap: 1rem;
+    }
+    .vendor-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem;
+      color: inherit;
+      display: flex;
+      flex-direction: column;
+      transition: border-color 0.15s ease;
+    }
+    .vendor-card:hover {
+      border-color: var(--accent-border);
+      color: inherit;
+    }
+    .vendor-card-header {
+      display: flex;
+      gap: 0.75rem;
+      align-items: flex-start;
+      margin-bottom: 0.75rem;
+    }
+    .vendor-logo {
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius-md);
+      object-fit: contain;
+      background: var(--surface-raised);
+      flex-shrink: 0;
+    }
+    .vendor-logo-placeholder {
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius-md);
+      background: var(--accent-muted);
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 1.1rem;
+      flex-shrink: 0;
+    }
+    .vendor-card-name {
+      font-weight: 600;
+      font-size: 0.95rem;
+      margin-bottom: 0.2rem;
+    }
+    .vendor-card-cats {
+      display: flex;
+      gap: 0.25rem;
+      flex-wrap: wrap;
+    }
+    .vendor-card-cats .badge { font-size: 0.6rem; }
+    .vendor-card-desc {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      margin: 0 0 0.75rem;
+      flex: 1;
+    }
+    .vendor-card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: auto;
+    }
+    .vendor-ratings {
+      display: flex;
+      gap: 0.5rem;
+    }
+    .rating-pill {
+      font-size: 0.75rem;
+      padding: 0.15rem 0.4rem;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+    }
+    .rating-pill.up {
+      color: var(--success-text);
+      background: var(--success-bg);
+    }
+    .rating-pill.down {
+      color: var(--error-text);
+      background: var(--error-bg);
+    }
+    .vendor-card-url {
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+  </style>
+</Base>

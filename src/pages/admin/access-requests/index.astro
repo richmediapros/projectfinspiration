@@ -1,0 +1,278 @@
+---
+import Base from '../../../layouts/Base.astro';
+import { requireAdmin } from '../../../lib/auth';
+import { env } from 'cloudflare:workers';
+import { hashPassword, generateTempPassword, setPasswordEntry } from '../../../lib/password';
+import { logActivity } from '../../../lib/activity';
+
+const forbidden = requireAdmin(Astro);
+if (forbidden) return forbidden;
+
+const db = env.DB;
+let error = '';
+let success = '';
+let tempPass = '';
+let approvedName = '';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const requestId = String(form.get('request_id') ?? '');
+  const action = String(form.get('action') ?? '');
+
+  const req = await db
+    .prepare('SELECT * FROM access_requests WHERE id = ?')
+    .bind(requestId)
+    .first<{ id: string; name: string; email: string; association_name: string | null; title: string | null; status: string }>();
+
+  if (!req) {
+    error = 'Request not found.';
+  } else if (req.status !== 'pending') {
+    error = 'This request has already been reviewed.';
+  } else if (action === 'approve') {
+    const associationId = String(form.get('association_id') ?? '').trim();
+    if (!associationId) {
+      error = 'Select an association for this user.';
+    } else {
+      const existing = await db.prepare('SELECT id FROM users WHERE email = ?').bind(req.email.toLowerCase()).first();
+      if (existing) {
+        error = 'A user with this email already exists.';
+      } else {
+        const userId = crypto.randomUUID();
+        await db
+          .prepare('INSERT INTO users (id, email, name, title, association_id, role, status) VALUES (?, ?, ?, ?, ?, ?, ?)')
+          .bind(userId, req.email.toLowerCase(), req.name, req.title || null, associationId, 'user', 'active')
+          .run();
+
+        tempPass = generateTempPassword();
+        const { hash, salt } = await hashPassword(tempPass);
+        await setPasswordEntry(db, req.email, { hash, salt, is_temp: 1 });
+
+        await db
+          .prepare("UPDATE access_requests SET status = 'approved', reviewed_by = ?, reviewed_at = datetime('now') WHERE id = ?")
+          .bind(Astro.locals.userId, requestId)
+          .run();
+
+        await logActivity(db, Astro.request, 'user_created', Astro.locals.userEmail!, `Approved: ${req.name} (${req.email})`);
+        approvedName = req.name;
+        success = `Approved and created account for ${req.name}.`;
+      }
+    }
+  } else if (action === 'deny') {
+    await db
+      .prepare("UPDATE access_requests SET status = 'denied', reviewed_by = ?, reviewed_at = datetime('now') WHERE id = ?")
+      .bind(Astro.locals.userId, requestId)
+      .run();
+    success = `Request from ${req.name} denied.`;
+  }
+}
+
+interface AccessRequest {
+  id: string;
+  name: string;
+  email: string;
+  association_name: string | null;
+  title: string | null;
+  message: string | null;
+  status: string;
+  created_at: string;
+}
+
+const pending = (await db
+  .prepare("SELECT * FROM access_requests WHERE status = 'pending' ORDER BY created_at DESC")
+  .all<AccessRequest>()).results;
+
+const reviewed = (await db
+  .prepare("SELECT * FROM access_requests WHERE status != 'pending' ORDER BY created_at DESC LIMIT 25")
+  .all<AccessRequest>()).results;
+
+interface AssocOption { id: string; name: string; }
+const associations = (await db
+  .prepare('SELECT id, name FROM associations ORDER BY name')
+  .all<AssocOption>()).results;
+---
+
+<Base title="Access Requests | Admin | Finspiration">
+  <div class="page-header">
+    <div class="overline">Admin</div>
+    <h1>Access Requests</h1>
+    <p class="description">Review requests from people who want to use Finspiration.</p>
+  </div>
+
+  {error && <div class="alert alert-error">{error}</div>}
+  {success && (
+    <div class="alert alert-success">
+      {success}
+      {tempPass && (
+        <div class="temp-pass-block">
+          Temporary password for {approvedName}: <code>{tempPass}</code>
+          <br /><small>Share this with the user — they'll set their own password on first login.</small>
+        </div>
+      )}
+    </div>
+  )}
+
+  <h2 class="section-title">Pending ({pending.length})</h2>
+  {pending.length === 0 ? (
+    <p class="empty">No pending requests.</p>
+  ) : (
+    <div class="req-list">
+      {pending.map((r) => (
+        <div class="req-card">
+          <div class="req-header">
+            <div>
+              <div class="req-name">{r.name}</div>
+              <div class="req-meta">
+                <span>{r.email}</span>
+                {r.association_name && <span>{r.association_name}</span>}
+                {r.title && <span>{r.title}</span>}
+              </div>
+            </div>
+            <div class="req-date">{new Date(r.created_at + 'Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+          </div>
+          {r.message && <div class="req-message">{r.message}</div>}
+          <div class="req-actions">
+            <form method="POST" class="approve-form">
+              <input type="hidden" name="request_id" value={r.id} />
+              <input type="hidden" name="action" value="approve" />
+              <select name="association_id" required>
+                <option value="">Assign association...</option>
+                {associations.map((a) => (
+                  <option value={a.id}>{a.name}</option>
+                ))}
+              </select>
+              <button type="submit" class="btn btn-primary btn-sm">Approve</button>
+            </form>
+            <form method="POST">
+              <input type="hidden" name="request_id" value={r.id} />
+              <input type="hidden" name="action" value="deny" />
+              <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Deny this request?')">Deny</button>
+            </form>
+          </div>
+        </div>
+      ))}
+    </div>
+  )}
+
+  {reviewed.length > 0 && (
+    <>
+      <h2 class="section-title" style="margin-top: 2.5rem">Reviewed</h2>
+      <div class="reviewed-list">
+        {reviewed.map((r) => (
+          <div class="reviewed-row">
+            <span class={`badge ${r.status === 'approved' ? 'badge-success' : 'badge-neutral'}`}>{r.status}</span>
+            <span class="reviewed-name">{r.name}</span>
+            <span class="reviewed-email">{r.email}</span>
+            <span class="reviewed-date">{new Date(r.created_at + 'Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+          </div>
+        ))}
+      </div>
+    </>
+  )}
+
+  <style>
+    .section-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 0.75rem;
+    }
+    .req-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .req-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem;
+    }
+    .req-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+    .req-name {
+      font-weight: 600;
+      font-size: 0.95rem;
+      margin-bottom: 0.1rem;
+    }
+    .req-meta {
+      display: flex;
+      gap: 0.75rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+      flex-wrap: wrap;
+    }
+    .req-date {
+      font-size: 0.75rem;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .req-message {
+      margin-top: 0.75rem;
+      padding: 0.75rem;
+      background: var(--surface-raised);
+      border-radius: var(--radius-md);
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+    .req-actions {
+      margin-top: 0.75rem;
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .approve-form {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    .approve-form select {
+      font-size: 0.8rem;
+      padding: 0.35rem 0.5rem;
+    }
+    .btn-sm {
+      font-size: 0.8rem;
+      padding: 0.35rem 0.75rem;
+    }
+    .temp-pass-block {
+      margin-top: 0.5rem;
+      padding: 0.75rem;
+      background: var(--surface);
+      border-radius: var(--radius-md);
+    }
+    .temp-pass-block code {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--accent);
+      user-select: all;
+    }
+    .reviewed-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+    .reviewed-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.6rem 1rem;
+      background: var(--surface);
+      font-size: 0.85rem;
+    }
+    .reviewed-name { font-weight: 500; }
+    .reviewed-email { color: var(--muted); }
+    .reviewed-date { color: var(--muted); font-size: 0.75rem; margin-left: auto; }
+    .badge-success {
+      background: var(--success-bg);
+      color: var(--success-text);
+      border: 1px solid var(--success-border);
+    }
+  </style>
+</Base>

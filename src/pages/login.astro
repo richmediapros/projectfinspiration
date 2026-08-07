@@ -1,0 +1,290 @@
+---
+import '../styles/global.css';
+import { env } from 'cloudflare:workers';
+import { SUPER_ADMIN_EMAIL, getUserByEmail } from '../lib/auth';
+import { createSession, makeSessionCookie } from '../lib/session';
+import {
+  getPasswordEntry,
+  verifyPassword,
+  hashPassword,
+  setPasswordEntry,
+  checkRateLimit,
+  recordFailedAttempt,
+  clearFailedAttempts,
+} from '../lib/password';
+import { logActivity } from '../lib/activity';
+
+let step: 'login' | 'set-password' = 'login';
+let email = '';
+let tempPassword = '';
+let error = '';
+let returnTo = Astro.url.searchParams.get('return_to') || '/dashboard';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = String(form.get('action') ?? '');
+  returnTo = String(form.get('return_to') ?? '/dashboard');
+  const db = env.DB;
+
+  if (action === 'login') {
+    email = String(form.get('email') ?? '').toLowerCase().trim();
+    const password = String(form.get('password') ?? '');
+
+    if (!email || !password) {
+      error = 'Please enter your email and password.';
+    } else {
+      const user = await getUserByEmail(db, email);
+      const isAllowed = (user && user.status === 'active') || email === SUPER_ADMIN_EMAIL;
+
+      if (!isAllowed) {
+        error = 'Incorrect email or password.';
+      } else {
+        const { locked } = await checkRateLimit(db, email);
+        if (locked) {
+          await logActivity(db, Astro.request, 'account_locked', email);
+          error = 'Account temporarily locked. Try again in a few minutes.';
+        } else {
+          const entry = await getPasswordEntry(db, email);
+          if (!entry) {
+            error = 'No password set. Contact your administrator.';
+          } else {
+            const valid = await verifyPassword(password, entry);
+            if (!valid) {
+              await recordFailedAttempt(db, email);
+              await logActivity(db, Astro.request, 'login_failed', email);
+              error = 'Incorrect email or password.';
+            } else {
+              await clearFailedAttempts(db, email);
+              if (entry.is_temp) {
+                step = 'set-password';
+                tempPassword = password;
+              } else {
+                await logActivity(db, Astro.request, 'login', email);
+                const token = await createSession(db, email);
+                return new Response(null, {
+                  status: 302,
+                  headers: {
+                    Location: returnTo || '/dashboard',
+                    'Set-Cookie': makeSessionCookie(token),
+                  },
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+  } else if (action === 'set_password') {
+    email = String(form.get('email') ?? '').toLowerCase().trim();
+    const oldPassword = String(form.get('temp_password') ?? '');
+    const newPassword = String(form.get('new_password') ?? '');
+    const confirmPassword = String(form.get('confirm_password') ?? '');
+
+    const entry = await getPasswordEntry(db, email);
+
+    if (!entry || !entry.is_temp) {
+      error = 'Invalid request. Please sign in again.';
+      step = 'login';
+    } else {
+      const valid = await verifyPassword(oldPassword, entry);
+      if (!valid) {
+        error = 'Session expired. Please sign in again.';
+        step = 'login';
+      } else if (newPassword.length < 12) {
+        error = 'Password must be at least 12 characters.';
+        step = 'set-password';
+        tempPassword = oldPassword;
+      } else if (newPassword !== confirmPassword) {
+        error = 'Passwords do not match.';
+        step = 'set-password';
+        tempPassword = oldPassword;
+      } else {
+        const { hash, salt } = await hashPassword(newPassword);
+        await setPasswordEntry(db, email, { hash, salt, is_temp: 0 });
+        await logActivity(db, Astro.request, 'password_set', email);
+        await logActivity(db, Astro.request, 'login', email);
+        const token = await createSession(db, email);
+        return new Response(null, {
+          status: 302,
+          headers: {
+            Location: returnTo || '/dashboard',
+            'Set-Cookie': makeSessionCookie(token),
+          },
+        });
+      }
+    }
+  }
+}
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <script is:inline>
+      (function () {
+        try {
+          var saved = localStorage.getItem('theme');
+          var theme = saved ||
+            (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+          document.documentElement.setAttribute('data-theme', theme);
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      })();
+    </script>
+    <title>Sign In | Finspiration</title>
+  </head>
+  <body>
+    <div class="login-page">
+      <div class="login-card">
+        <div class="login-brand">
+          <span class="login-brand-icon">F</span>
+          <span class="login-brand-text">Finspiration</span>
+        </div>
+
+        {step === 'login' && (
+          <Fragment>
+            <p class="login-sub">Sign in with your association credentials.</p>
+
+            {error && <div class="alert alert-error">{error}</div>}
+
+            <form method="POST">
+              <input type="hidden" name="action" value="login" />
+              <input type="hidden" name="return_to" value={returnTo} />
+              <div class="form-group">
+                <label for="email">Email address</label>
+                <input type="email" id="email" name="email" value={email} placeholder="you@example.com" required autofocus />
+              </div>
+              <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required />
+              </div>
+              <button type="submit" class="btn btn-primary login-submit">Sign in</button>
+            </form>
+          </Fragment>
+        )}
+
+        {step === 'set-password' && (
+          <Fragment>
+            <p class="login-sub">Choose a password with at least 12 characters.</p>
+
+            {error && <div class="alert alert-error">{error}</div>}
+
+            <form method="POST">
+              <input type="hidden" name="action" value="set_password" />
+              <input type="hidden" name="email" value={email} />
+              <input type="hidden" name="temp_password" value={tempPassword} />
+              <input type="hidden" name="return_to" value={returnTo} />
+              <div class="form-group">
+                <label for="new_password">New password</label>
+                <input type="password" id="new_password" name="new_password" minlength="12" required autofocus />
+              </div>
+              <div class="form-group">
+                <label for="confirm_password">Confirm password</label>
+                <input type="password" id="confirm_password" name="confirm_password" minlength="12" required />
+              </div>
+              <button type="submit" class="btn btn-primary login-submit">Save password</button>
+            </form>
+          </Fragment>
+        )}
+      </div>
+      <div class="login-links">
+        <a href="/">&larr; Back to home</a>
+        <a href="/request-access">Request access</a>
+      </div>
+      <div class="login-footer">
+        <p>Access restricted to state banking association members.</p>
+      </div>
+    </div>
+
+    <style>
+      .login-page {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem 1rem;
+        background: var(--bg);
+      }
+      .login-card {
+        width: 100%;
+        max-width: 380px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 2rem 1.75rem;
+      }
+      .login-brand {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 1.5rem;
+      }
+      .login-brand-icon {
+        width: 32px;
+        height: 32px;
+        background: var(--accent);
+        color: var(--on-accent);
+        border-radius: var(--radius-md);
+        display: grid;
+        place-items: center;
+        font-family: var(--font-heading);
+        font-weight: 700;
+        font-size: 1rem;
+      }
+      .login-brand-text {
+        font-family: var(--font-heading);
+        font-weight: 700;
+        font-size: 1.15rem;
+        color: var(--text);
+        letter-spacing: -0.02em;
+      }
+      .login-sub {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+        margin: 0 0 1.25rem;
+      }
+      .form-group {
+        margin-bottom: 1rem;
+      }
+      .form-group label {
+        display: block;
+        font-size: 0.825rem;
+        font-weight: 500;
+        color: var(--text-secondary);
+        margin-bottom: 0.3rem;
+      }
+      .login-submit {
+        width: 100%;
+        justify-content: center;
+        margin-top: 0.25rem;
+      }
+      .login-links {
+        display: flex;
+        justify-content: space-between;
+        width: 100%;
+        max-width: 380px;
+        margin-top: 1rem;
+        font-size: 0.825rem;
+      }
+      .login-links a {
+        color: var(--muted);
+        transition: color 0.12s ease;
+      }
+      .login-links a:hover {
+        color: var(--accent);
+      }
+      .login-footer {
+        text-align: center;
+        margin-top: 1.25rem;
+        font-size: 0.725rem;
+        color: var(--muted);
+      }
+      .login-footer p { margin: 0; }
+    </style>
+  </body>
+</html>

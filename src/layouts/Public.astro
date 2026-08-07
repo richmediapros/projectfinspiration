@@ -7,16 +7,132 @@ interface Props {
 
 const { title = 'Finspiration' } = Astro.props;
 ---
+
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@500;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-  <title>{title}</title>
-</head>
-<body>
-  <slot />
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <script is:inline>
+      (function () {
+        try {
+          var saved = localStorage.getItem('theme');
+          var theme = saved ||
+            (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+          document.documentElement.setAttribute('data-theme', theme);
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      })();
+    </script>
+    <title>{title}</title>
+  </head>
+  <body>
+    <header class="pub-header">
+      <div class="pub-header-inner">
+        <a href="/" class="pub-brand">
+          <span class="pub-brand-icon">F</span>
+          <span>Finspiration</span>
+        </a>
+        <nav class="pub-nav">
+          <a href="/request-access">Request Access</a>
+          <a href="/login" class="pub-signin">Sign in</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="pub-main">
+      <slot />
+    </main>
+
+    <footer class="pub-footer">
+      <span>&copy; 2026 Finspiration. All rights reserved.</span>
+    </footer>
+
+    <style>
+      body {
+        display: flex;
+        flex-direction: column;
+        min-height: 100dvh;
+      }
+      .pub-main {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+      }
+      .pub-header {
+        border-bottom: 1px solid var(--border);
+        background: var(--surface);
+      }
+      .pub-header-inner {
+        max-width: 1100px;
+        margin: 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.875rem 1.5rem;
+      }
+      .pub-brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-family: var(--font-heading);
+        font-weight: 700;
+        font-size: 1.05rem;
+        color: var(--text);
+        letter-spacing: -0.02em;
+      }
+      .pub-brand:hover { color: var(--text); }
+      .pub-brand-icon {
+        width: 28px;
+        height: 28px;
+        background: var(--accent);
+        color: var(--on-accent);
+        border-radius: var(--radius-sm);
+        display: grid;
+        place-items: center;
+        font-size: 0.85rem;
+      }
+      .pub-nav {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.875rem;
+      }
+      .pub-nav a {
+        color: var(--text-secondary);
+        padding: 0.35rem 0.65rem;
+        border-radius: var(--radius-sm);
+        font-weight: 500;
+        transition: color 0.12s ease, background 0.12s ease;
+      }
+      .pub-nav a:hover {
+        color: var(--text);
+        background: var(--accent-muted);
+      }
+      .pub-signin {
+        color: var(--accent) !important;
+        border: 1px solid var(--accent-border);
+        padding: 0.35rem 0.85rem !important;
+        font-weight: 600;
+      }
+      .pub-signin:hover {
+        background: var(--accent-muted) !important;
+        color: var(--accent-hover) !important;
+      }
+      .pub-footer {
+        padding: 1.25rem 1.5rem;
+        border-top: 1px solid var(--border);
+        color: var(--muted);
+        font-size: 0.75rem;
+        text-align: center;
+      }
+      @media (max-width: 540px) {
+        .pub-header-inner {
+          padding: 0.75rem 1rem;
+        }
+      }
+    </style>
+  </body>
 </html>

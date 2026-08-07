@@ -1,0 +1,80 @@
+---
+import Base from '../layouts/Base.astro';
+import { env } from 'cloudflare:workers';
+import {
+  getPasswordEntry,
+  verifyPassword,
+  hashPassword,
+  setPasswordEntry,
+} from '../lib/password';
+import { logActivity } from '../lib/activity';
+
+let error = '';
+let success = '';
+const userEmail = Astro.locals.userEmail!;
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const currentPassword = String(form.get('current_password') ?? '');
+  const newPassword = String(form.get('new_password') ?? '');
+  const confirmPassword = String(form.get('confirm_password') ?? '');
+  const db = env.DB;
+
+  if (!currentPassword || !newPassword) {
+    error = 'All fields are required.';
+  } else {
+    const entry = await getPasswordEntry(db, userEmail);
+    if (!entry) {
+      error = 'No password found. Contact your administrator.';
+    } else {
+      const valid = await verifyPassword(currentPassword, entry);
+      if (!valid) {
+        error = 'Current password is incorrect.';
+      } else if (newPassword.length < 12) {
+        error = 'New password must be at least 12 characters.';
+      } else if (newPassword !== confirmPassword) {
+        error = 'Passwords do not match.';
+      } else {
+        const { hash, salt } = await hashPassword(newPassword);
+        await setPasswordEntry(db, userEmail, { hash, salt, is_temp: 0 });
+        await logActivity(db, Astro.request, 'password_set', userEmail);
+        success = 'Password updated successfully.';
+      }
+    }
+  }
+}
+---
+
+<Base title="Account | Finspiration">
+  <div class="page-header">
+    <div class="overline">Account</div>
+    <h1>Change Password</h1>
+  </div>
+
+  <div class="account-form">
+    {error && <div class="alert alert-error">{error}</div>}
+    {success && <div class="alert alert-success">{success}</div>}
+
+    <form method="POST">
+      <div class="form-group">
+        <label for="current_password">Current password</label>
+        <input type="password" id="current_password" name="current_password" required />
+      </div>
+      <div class="form-group">
+        <label for="new_password">New password</label>
+        <input type="password" id="new_password" name="new_password" minlength="12" required />
+      </div>
+      <div class="form-group">
+        <label for="confirm_password">Confirm new password</label>
+        <input type="password" id="confirm_password" name="confirm_password" minlength="12" required />
+      </div>
+      <button type="submit" class="btn btn-primary">Update Password</button>
+    </form>
+  </div>
+
+  <style>
+    .account-form {
+      max-width: 420px;
+    }
+  </style>
+</Base>

@@ -1,0 +1,242 @@
+---
+import Base from '../../../layouts/Base.astro';
+import { requireAdmin } from '../../../lib/auth';
+import { env } from 'cloudflare:workers';
+import { hashPassword, generateTempPassword, setPasswordEntry } from '../../../lib/password';
+import { logActivity } from '../../../lib/activity';
+
+const forbidden = requireAdmin(Astro);
+if (forbidden) return forbidden;
+
+const db = env.DB;
+let error = '';
+let success = '';
+let tempPass = '';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const email = String(form.get('email') ?? '').trim().toLowerCase();
+  const name = String(form.get('name') ?? '').trim();
+  const title = String(form.get('title') ?? '').trim();
+  const associationId = String(form.get('association_id') ?? '').trim();
+
+  if (!email || !name) {
+    error = 'Email and name are required.';
+  } else if (!associationId) {
+    error = 'Please select an association.';
+  } else {
+    const existing = await db.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
+    if (existing) {
+      error = 'A user with this email already exists.';
+    } else {
+      const id = crypto.randomUUID();
+      await db
+        .prepare('INSERT INTO users (id, email, name, title, association_id, role, status) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .bind(id, email, name, title || null, associationId, 'user', 'active')
+        .run();
+
+      tempPass = generateTempPassword();
+      const { hash, salt } = await hashPassword(tempPass);
+      await setPasswordEntry(db, email, { hash, salt, is_temp: 1 });
+      await logActivity(db, Astro.request, 'user_created', Astro.locals.userEmail!, `${name} (${email})`);
+      success = `User "${name}" created.`;
+    }
+  }
+}
+
+interface UserRow {
+  id: string;
+  email: string;
+  name: string;
+  title: string | null;
+  role: string;
+  status: string;
+  association_name: string | null;
+  created_at: string;
+}
+
+const users = (await db
+  .prepare(`
+    SELECT u.id, u.email, u.name, u.title, u.role, u.status, a.name as association_name, u.created_at
+    FROM users u
+    LEFT JOIN associations a ON u.association_id = a.id
+    ORDER BY u.name
+  `)
+  .all<UserRow>()).results;
+
+interface AssocOption {
+  id: string;
+  name: string;
+}
+
+const associations = (await db
+  .prepare('SELECT id, name FROM associations ORDER BY name')
+  .all<AssocOption>()).results;
+---
+
+<Base title="Users | Admin | Finspiration">
+  <div class="page-header">
+    <div class="overline">Admin</div>
+    <h1>Users</h1>
+    <p class="description">Manage user accounts and create new users with temporary passwords.</p>
+  </div>
+
+  {error && <div class="alert alert-error">{error}</div>}
+  {success && (
+    <div class="alert alert-success">
+      {success}
+      {tempPass && (
+        <div class="temp-pass-block">
+          Temporary password: <code>{tempPass}</code>
+          <br /><small>Share this with the user — they'll be prompted to change it on first login.</small>
+        </div>
+      )}
+    </div>
+  )}
+
+  <div class="add-form">
+    <h3>Add User</h3>
+    <form method="POST">
+      <div class="form-row">
+        <div class="form-group">
+          <label for="name">Name <span class="required">*</span></label>
+          <input type="text" id="name" name="name" required />
+        </div>
+        <div class="form-group">
+          <label for="email">Email <span class="required">*</span></label>
+          <input type="email" id="email" name="email" required />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="title">Title</label>
+          <input type="text" id="title" name="title" placeholder="e.g. VP of Membership" />
+        </div>
+        <div class="form-group">
+          <label for="association_id">Association <span class="required">*</span></label>
+          <select id="association_id" name="association_id" required>
+            <option value="">Select...</option>
+            {associations.map((a) => (
+              <option value={a.id}>{a.name}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary">Create User</button>
+    </form>
+  </div>
+
+  {users.length === 0 ? (
+    <p class="empty">No users yet.</p>
+  ) : (
+    <div class="user-list">
+      {users.map((u) => (
+        <a href={`/admin/users/${u.id}`} class="user-row">
+          <div class="user-avatar">{u.name.charAt(0).toUpperCase()}</div>
+          <div class="user-info">
+            <div class="user-name">
+              {u.name}
+              {u.role === 'super_admin' && <span class="badge badge-accent">Super Admin</span>}
+              {u.status !== 'active' && <span class="badge badge-neutral">{u.status}</span>}
+            </div>
+            <div class="user-meta">
+              <span>{u.email}</span>
+              {u.association_name && <span>{u.association_name}</span>}
+              {u.title && <span>{u.title}</span>}
+            </div>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </a>
+      ))}
+    </div>
+  )}
+
+  <style>
+    .add-form {
+      margin-bottom: 2rem;
+    }
+    .add-form h3 {
+      font-size: 0.95rem;
+      margin-bottom: 0.75rem;
+    }
+    .add-form form {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem;
+    }
+    .form-row {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .form-row .form-group { flex: 1; min-width: 200px; }
+    .temp-pass-block {
+      margin-top: 0.5rem;
+      padding: 0.75rem;
+      background: var(--surface);
+      border-radius: var(--radius-md);
+    }
+    .temp-pass-block code {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--accent);
+      user-select: all;
+    }
+    .user-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+    .user-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 1.25rem;
+      background: var(--surface);
+      color: inherit;
+      transition: background 0.1s ease;
+    }
+    .user-row:hover {
+      background: var(--surface-raised);
+      color: inherit;
+    }
+    .user-row svg {
+      color: var(--muted);
+      flex-shrink: 0;
+      margin-left: auto;
+    }
+    .user-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--accent-muted);
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.85rem;
+      flex-shrink: 0;
+    }
+    .user-name {
+      font-weight: 600;
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.1rem;
+    }
+    .user-meta {
+      display: flex;
+      gap: 0.75rem;
+      font-size: 0.78rem;
+      color: var(--muted);
+      flex-wrap: wrap;
+    }
+  </style>
+</Base>

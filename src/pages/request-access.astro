@@ -1,0 +1,133 @@
+---
+import Public from '../layouts/Public.astro';
+import { env } from 'cloudflare:workers';
+import { logActivity } from '../lib/activity';
+
+let success = false;
+let error = '';
+let name = '';
+let email = '';
+let associationName = '';
+let title = '';
+let message = '';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  name = String(form.get('name') ?? '').trim();
+  email = String(form.get('email') ?? '').trim();
+  associationName = String(form.get('association_name') ?? '').trim();
+  title = String(form.get('title') ?? '').trim();
+  message = String(form.get('message') ?? '').trim();
+
+  if (!name || !email) {
+    error = 'Name and email are required.';
+  } else {
+    const db = env.DB;
+    const id = crypto.randomUUID();
+    await db
+      .prepare(
+        'INSERT INTO access_requests (id, name, email, association_name, title, message) VALUES (?, ?, ?, ?, ?, ?)'
+      )
+      .bind(id, name, email, associationName || null, title || null, message || null)
+      .run();
+
+    await logActivity(db, Astro.request, 'access_request', email, name);
+    success = true;
+  }
+}
+---
+
+<Public title="Request Access | Finspiration">
+  <div class="ra-page">
+    <div class="ra-card">
+      {success ? (
+        <div class="ra-success">
+          <div class="ra-success-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </div>
+          <h2>Request submitted</h2>
+          <p>We'll review your request and get back to you shortly.</p>
+          <a href="/" class="btn btn-secondary">&larr; Back to home</a>
+        </div>
+      ) : (
+        <Fragment>
+          <h1>Request Access</h1>
+          <p class="ra-sub">
+            Finspiration is available to employees of state banking associations.
+            Submit a request and we'll review it.
+          </p>
+
+          {error && <div class="alert alert-error">{error}</div>}
+
+          <form method="POST">
+            <div class="form-group">
+              <label for="name">Name <span class="required">*</span></label>
+              <input type="text" id="name" name="name" value={name} required autofocus />
+            </div>
+            <div class="form-group">
+              <label for="email">Email <span class="required">*</span></label>
+              <input type="email" id="email" name="email" value={email} required />
+            </div>
+            <div class="form-group">
+              <label for="association_name">Association</label>
+              <input type="text" id="association_name" name="association_name" value={associationName} placeholder="e.g. Texas Bankers Association" />
+            </div>
+            <div class="form-group">
+              <label for="title">Title</label>
+              <input type="text" id="title" name="title" value={title} />
+            </div>
+            <div class="form-group">
+              <label for="message">Message</label>
+              <textarea id="message" name="message" rows="4">{message}</textarea>
+            </div>
+            <button type="submit" class="btn btn-primary ra-submit">Submit Request</button>
+          </form>
+        </Fragment>
+      )}
+    </div>
+  </div>
+
+  <style>
+    .ra-page {
+      flex: 1;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 3rem 1rem;
+    }
+    .ra-card {
+      width: 100%;
+      max-width: 480px;
+    }
+    .ra-card h1 {
+      font-size: 1.5rem;
+      margin-bottom: 0.35rem;
+    }
+    .ra-sub {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      margin: 0 0 1.5rem;
+    }
+    .ra-submit {
+      width: 100%;
+      justify-content: center;
+    }
+    .ra-success {
+      text-align: center;
+      padding: 2rem 0;
+    }
+    .ra-success-icon {
+      color: var(--success-text);
+      margin-bottom: 1rem;
+    }
+    .ra-success h2 {
+      font-size: 1.25rem;
+      margin-bottom: 0.5rem;
+    }
+    .ra-success p {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      margin: 0 0 1.5rem;
+    }
+  </style>
+</Public>

@@ -1,0 +1,84 @@
+---
+import Base from '../../layouts/Base.astro';
+import { requireAdmin } from '../../lib/auth';
+import { env } from 'cloudflare:workers';
+
+const forbidden = requireAdmin(Astro);
+if (forbidden) return forbidden;
+
+const db = env.DB;
+
+const userCount = await db.prepare('SELECT COUNT(*) as count FROM users').first<{ count: number }>();
+const assocCount = await db.prepare('SELECT COUNT(*) as count FROM associations').first<{ count: number }>();
+const vendorCount = await db.prepare('SELECT COUNT(*) as count FROM vendors').first<{ count: number }>();
+const pendingCount = await db.prepare("SELECT COUNT(*) as count FROM access_requests WHERE status = 'pending'").first<{ count: number }>();
+---
+
+<Base title="Admin | Finspiration">
+  <div class="page-header">
+    <div class="overline">Admin</div>
+    <h1>Overview</h1>
+  </div>
+
+  <div class="stat-row">
+    <div class="stat-card">
+      <div class="stat-value">{assocCount?.count ?? 0}</div>
+      <div class="stat-label">Associations</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">{userCount?.count ?? 0}</div>
+      <div class="stat-label">Users</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">{vendorCount?.count ?? 0}</div>
+      <div class="stat-label">Vendors</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">{pendingCount?.count ?? 0}</div>
+      <div class="stat-label">Pending Requests</div>
+    </div>
+  </div>
+
+  <div class="card-grid cols-3">
+    <a href="/admin/associations" class="admin-link-card">
+      <h3>Associations</h3>
+      <p>Manage state banking associations.</p>
+    </a>
+    <a href="/admin/users" class="admin-link-card">
+      <h3>Users</h3>
+      <p>Add, edit, and manage user accounts.</p>
+    </a>
+    <a href="/admin/access-requests" class="admin-link-card">
+      <h3>Access Requests</h3>
+      <p>Review and approve pending access requests.</p>
+    </a>
+    <a href="/admin/categories" class="admin-link-card">
+      <h3>Categories</h3>
+      <p>Manage vendor categories.</p>
+    </a>
+  </div>
+
+  <style>
+    .admin-link-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem 1.5rem;
+      color: inherit;
+      transition: border-color 0.15s ease;
+    }
+    .admin-link-card:hover {
+      border-color: var(--accent-border);
+      color: inherit;
+    }
+    .admin-link-card h3 {
+      font-size: 0.95rem;
+      margin-bottom: 0.2rem;
+    }
+    .admin-link-card p {
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+      margin: 0;
+    }
+  </style>
+</Base>

@@ -1,0 +1,224 @@
+---
+import Base from '../../../layouts/Base.astro';
+import { requireAdmin } from '../../../lib/auth';
+import { env } from 'cloudflare:workers';
+import { hashPassword, generateTempPassword, setPasswordEntry, deletePasswordEntry } from '../../../lib/password';
+import { deleteSessionsForEmail } from '../../../lib/session';
+import { logActivity } from '../../../lib/activity';
+
+const forbidden = requireAdmin(Astro);
+if (forbidden) return forbidden;
+
+const db = env.DB;
+const { id } = Astro.params;
+let error = '';
+let success = '';
+let tempPass = '';
+
+interface UserDetail {
+  id: string;
+  email: string;
+  name: string;
+  title: string | null;
+  role: string;
+  status: string;
+  association_id: string | null;
+  association_name: string | null;
+  created_at: string;
+}
+
+let user = await db
+  .prepare(`
+    SELECT u.*, a.name as association_name
+    FROM users u
+    LEFT JOIN associations a ON u.association_id = a.id
+    WHERE u.id = ?
+  `)
+  .bind(id)
+  .first<UserDetail>();
+
+if (!user) return new Response('Not found', { status: 404 });
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = String(form.get('action') ?? '');
+
+  if (action === 'update') {
+    const name = String(form.get('name') ?? '').trim();
+    const title = String(form.get('title') ?? '').trim();
+    const associationId = String(form.get('association_id') ?? '').trim();
+    const status = String(form.get('status') ?? '').trim();
+
+    if (!name) {
+      error = 'Name is required.';
+    } else {
+      await db
+        .prepare('UPDATE users SET name = ?, title = ?, association_id = ?, status = ? WHERE id = ?')
+        .bind(name, title || null, associationId || null, status || 'active', id)
+        .run();
+      await logActivity(db, Astro.request, 'user_updated', Astro.locals.userEmail!, `${name} (${user.email})`);
+
+      if (status === 'disabled' && user.status !== 'disabled') {
+        await deleteSessionsForEmail(db, user.email);
+      }
+
+      user = await db
+        .prepare('SELECT u.*, a.name as association_name FROM users u LEFT JOIN associations a ON u.association_id = a.id WHERE u.id = ?')
+        .bind(id)
+        .first<UserDetail>();
+      success = 'User updated.';
+    }
+  } else if (action === 'reset_password') {
+    tempPass = generateTempPassword();
+    const { hash, salt } = await hashPassword(tempPass);
+    await setPasswordEntry(db, user.email, { hash, salt, is_temp: 1 });
+    await deleteSessionsForEmail(db, user.email);
+    await logActivity(db, Astro.request, 'user_updated', Astro.locals.userEmail!, `Reset password for ${user.email}`);
+    success = 'Password reset.';
+  } else if (action === 'delete') {
+    if (user.role === 'super_admin') {
+      error = 'Cannot delete a super admin account.';
+    } else {
+      await deletePasswordEntry(db, user.email);
+      await deleteSessionsForEmail(db, user.email);
+      await db.prepare('DELETE FROM users WHERE id = ?').bind(id).run();
+      return new Response(null, { status: 302, headers: { Location: '/admin/users' } });
+    }
+  }
+}
+
+interface AssocOption {
+  id: string;
+  name: string;
+}
+
+const associations = (await db
+  .prepare('SELECT id, name FROM associations ORDER BY name')
+  .all<AssocOption>()).results;
+---
+
+<Base title={`${user?.name} | Users | Admin | Finspiration`}>
+  <div class="page-header">
+    <div class="overline"><a href="/admin/users">Users</a></div>
+    <h1>{user?.name}</h1>
+    <p class="description">{user?.email}</p>
+  </div>
+
+  {error && <div class="alert alert-error">{error}</div>}
+  {success && (
+    <div class="alert alert-success">
+      {success}
+      {tempPass && (
+        <div class="temp-pass-block">
+          Temporary password: <code>{tempPass}</code>
+          <br /><small>Share this with the user — they'll be prompted to change it on first login.</small>
+        </div>
+      )}
+    </div>
+  )}
+
+  <div class="edit-card">
+    <form method="POST">
+      <input type="hidden" name="action" value="update" />
+      <div class="form-row">
+        <div class="form-group" style="flex:2">
+          <label for="name">Name <span class="required">*</span></label>
+          <input type="text" id="name" name="name" value={user?.name} required />
+        </div>
+        <div class="form-group">
+          <label for="title">Title</label>
+          <input type="text" id="title" name="title" value={user?.title ?? ''} />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="association_id">Association</label>
+          <select id="association_id" name="association_id">
+            <option value="">None</option>
+            {associations.map((a) => (
+              <option value={a.id} selected={a.id === user?.association_id}>{a.name}</option>
+            ))}
+          </select>
+        </div>
+        <div class="form-group" style="max-width:160px">
+          <label for="status">Status</label>
+          <select id="status" name="status">
+            <option value="active" selected={user?.status === 'active'}>Active</option>
+            <option value="disabled" selected={user?.status === 'disabled'}>Disabled</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+        <a href="/admin/users" class="btn btn-secondary">Cancel</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="actions-card">
+    <h3>Password</h3>
+    <p>Generate a new temporary password. This will sign the user out of all sessions.</p>
+    <form method="POST">
+      <input type="hidden" name="action" value="reset_password" />
+      <button type="submit" class="btn btn-secondary">Reset Password</button>
+    </form>
+  </div>
+
+  {user?.role !== 'super_admin' && (
+    <div class="danger-zone">
+      <h3>Danger Zone</h3>
+      <form method="POST" onsubmit="return confirm('Permanently delete this user?')">
+        <input type="hidden" name="action" value="delete" />
+        <p>Permanently delete this user, their password, and all sessions.</p>
+        <button type="submit" class="btn btn-danger">Delete User</button>
+      </form>
+    </div>
+  )}
+
+  <style>
+    .edit-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem;
+      max-width: 640px;
+      margin-bottom: 1.5rem;
+    }
+    .form-row { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .form-row .form-group { flex: 1; min-width: 180px; }
+    .form-actions { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+    .actions-card {
+      max-width: 640px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .actions-card h3 { font-size: 0.9rem; margin-bottom: 0.25rem; }
+    .actions-card p { font-size: 0.85rem; color: var(--text-secondary); margin: 0 0 0.75rem; }
+    .overline a { color: var(--muted); transition: color 0.12s ease; }
+    .overline a:hover { color: var(--accent); }
+    .temp-pass-block {
+      margin-top: 0.5rem;
+      padding: 0.75rem;
+      background: var(--surface);
+      border-radius: var(--radius-md);
+    }
+    .temp-pass-block code {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--accent);
+      user-select: all;
+    }
+    .danger-zone {
+      max-width: 640px;
+      border: 1px solid var(--error-border);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem 1.5rem;
+      background: var(--error-bg);
+    }
+    .danger-zone h3 { font-size: 0.9rem; color: var(--error-text); margin-bottom: 0.35rem; }
+    .danger-zone p { font-size: 0.85rem; color: var(--text-secondary); margin: 0 0 0.75rem; }
+  </style>
+</Base>

@@ -1,0 +1,207 @@
+---
+import Base from '../../../layouts/Base.astro';
+import { env } from 'cloudflare:workers';
+
+const db = env.DB;
+const { id } = Astro.params;
+let error = '';
+
+interface Vendor {
+  id: string;
+  name: string;
+  logo_url: string | null;
+  website: string | null;
+  description: string | null;
+  contact_name: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+}
+
+let vendor = await db.prepare('SELECT * FROM vendors WHERE id = ?').bind(id).first<Vendor>();
+if (!vendor) return new Response('Not found', { status: 404 });
+
+interface Category { id: string; name: string; }
+const allCategories = (await db.prepare('SELECT id, name FROM categories ORDER BY name').all<Category>()).results;
+
+const currentCatIds = new Set(
+  (await db.prepare('SELECT category_id FROM vendor_categories WHERE vendor_id = ?').bind(id).all<{ category_id: string }>())
+    .results.map((r) => r.category_id)
+);
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = String(form.get('action') ?? '');
+
+  if (action === 'delete') {
+    await db.batch([
+      db.prepare('DELETE FROM vendor_categories WHERE vendor_id = ?').bind(id),
+      db.prepare('DELETE FROM ratings WHERE vendor_id = ?').bind(id),
+      db.prepare('DELETE FROM notes WHERE vendor_id = ?').bind(id),
+      db.prepare('DELETE FROM vendor_associations WHERE vendor_id = ?').bind(id),
+      db.prepare('DELETE FROM vendors WHERE id = ?').bind(id),
+    ]);
+    return new Response(null, { status: 302, headers: { Location: '/vendors' } });
+  }
+
+  const name = String(form.get('name') ?? '').trim();
+  const website = String(form.get('website') ?? '').trim();
+  const logoUrl = String(form.get('logo_url') ?? '').trim();
+  const description = String(form.get('description') ?? '').trim();
+  const contactName = String(form.get('contact_name') ?? '').trim();
+  const contactEmail = String(form.get('contact_email') ?? '').trim();
+  const contactPhone = String(form.get('contact_phone') ?? '').trim();
+  const selectedCategories = form.getAll('categories').map(String);
+
+  if (!name) {
+    error = 'Vendor name is required.';
+  } else {
+    await db
+      .prepare(`UPDATE vendors SET name = ?, logo_url = ?, website = ?, description = ?,
+                contact_name = ?, contact_email = ?, contact_phone = ?, updated_at = datetime('now')
+                WHERE id = ?`)
+      .bind(name, logoUrl || null, website || null, description || null,
+            contactName || null, contactEmail || null, contactPhone || null, id)
+      .run();
+
+    await db.prepare('DELETE FROM vendor_categories WHERE vendor_id = ?').bind(id).run();
+    if (selectedCategories.length > 0) {
+      const stmts = selectedCategories.map((catId) =>
+        db.prepare('INSERT INTO vendor_categories (vendor_id, category_id) VALUES (?, ?)').bind(id, catId)
+      );
+      await db.batch(stmts);
+    }
+
+    return new Response(null, { status: 302, headers: { Location: `/vendors/${id}` } });
+  }
+}
+---
+
+<Base title={`Edit ${vendor.name} | Finspiration`}>
+  <div class="page-header">
+    <div class="overline"><a href={`/vendors/${id}`}>{vendor.name}</a></div>
+    <h1>Edit Vendor</h1>
+  </div>
+
+  {error && <div class="alert alert-error">{error}</div>}
+
+  <form method="POST" class="vendor-form">
+    <div class="form-section">
+      <h3>Basic Info</h3>
+      <div class="form-group">
+        <label for="name">Vendor name <span class="required">*</span></label>
+        <input type="text" id="name" name="name" value={vendor.name} required />
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="website">Website</label>
+          <input type="url" id="website" name="website" value={vendor.website ?? ''} />
+        </div>
+        <div class="form-group">
+          <label for="logo_url">Logo URL</label>
+          <input type="url" id="logo_url" name="logo_url" value={vendor.logo_url ?? ''} />
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="description">Description</label>
+        <textarea id="description" name="description" rows="3">{vendor.description ?? ''}</textarea>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h3>Categories</h3>
+      {allCategories.length === 0 ? (
+        <p class="form-hint">No categories yet.</p>
+      ) : (
+        <div class="checkbox-grid">
+          {allCategories.map((c) => (
+            <label class="checkbox-label">
+              <input type="checkbox" name="categories" value={c.id} checked={currentCatIds.has(c.id)} />
+              {c.name}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+
+    <div class="form-section">
+      <h3>Contact</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="contact_name">Name</label>
+          <input type="text" id="contact_name" name="contact_name" value={vendor.contact_name ?? ''} />
+        </div>
+        <div class="form-group">
+          <label for="contact_email">Email</label>
+          <input type="email" id="contact_email" name="contact_email" value={vendor.contact_email ?? ''} />
+        </div>
+        <div class="form-group" style="max-width: 180px">
+          <label for="contact_phone">Phone</label>
+          <input type="tel" id="contact_phone" name="contact_phone" value={vendor.contact_phone ?? ''} />
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Save Changes</button>
+      <a href={`/vendors/${id}`} class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+
+  <div class="danger-zone">
+    <h3>Danger Zone</h3>
+    <form method="POST" onsubmit="return confirm('Permanently delete this vendor and all its ratings, notes, and associations?')">
+      <input type="hidden" name="action" value="delete" />
+      <p>Permanently delete this vendor, including all ratings, notes, and association relationships.</p>
+      <button type="submit" class="btn btn-danger">Delete Vendor</button>
+    </form>
+  </div>
+
+  <style>
+    .vendor-form { max-width: 680px; }
+    .form-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1rem;
+    }
+    .form-section h3 {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.75rem;
+    }
+    .form-row { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .form-row .form-group { flex: 1; min-width: 180px; }
+    .form-actions { display: flex; gap: 0.5rem; margin-bottom: 2rem; }
+    .overline a { color: var(--muted); transition: color 0.12s ease; }
+    .overline a:hover { color: var(--accent); }
+    .checkbox-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 0.35rem;
+    }
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.88rem;
+      padding: 0.35rem 0.5rem;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: background 0.1s ease;
+    }
+    .checkbox-label:hover { background: var(--surface-raised); }
+    .checkbox-label input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); }
+    .danger-zone {
+      max-width: 680px;
+      border: 1px solid var(--error-border);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem 1.5rem;
+      background: var(--error-bg);
+    }
+    .danger-zone h3 { font-size: 0.9rem; color: var(--error-text); margin-bottom: 0.35rem; }
+    .danger-zone p { font-size: 0.85rem; color: var(--text-secondary); margin: 0 0 0.75rem; }
+  </style>
+</Base>
