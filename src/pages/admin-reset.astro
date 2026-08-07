@@ -1,0 +1,44 @@
+---
+import { env } from 'cloudflare:workers';
+import { SUPER_ADMIN_EMAIL } from '../lib/auth';
+import { hashPassword, generateTempPassword, setPasswordEntry } from '../lib/password';
+
+const tempPassword = generateTempPassword();
+const { hash, salt } = await hashPassword(tempPassword);
+await setPasswordEntry(env.DB, SUPER_ADMIN_EMAIL, { hash, salt, is_temp: 1 });
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Admin Password Reset</title>
+    <style>
+      body { font-family: system-ui, sans-serif; background: #0c0f1a; color: #e2e4ed; display: grid; place-items: center; min-height: 100dvh; margin: 0; }
+      .card { background: #161a2a; border: 1px solid #252a3a; border-radius: 12px; padding: 2rem; max-width: 400px; width: 90%; }
+      h1 { font-size: 1.25rem; margin: 0 0 1.5rem; }
+      .field { margin-bottom: 1rem; }
+      label { display: block; font-size: 0.75rem; color: #8890a4; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.25rem; }
+      .value { font-family: monospace; font-size: 1.1rem; background: #1e2236; padding: 0.5rem 0.75rem; border-radius: 6px; user-select: all; }
+      a { display: inline-block; margin-top: 1rem; color: #5b8df9; }
+      .warn { font-size: 0.8rem; color: #e5a43c; margin-top: 1rem; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Password Reset</h1>
+      <div class="field">
+        <label>Email</label>
+        <div class="value">{SUPER_ADMIN_EMAIL}</div>
+      </div>
+      <div class="field">
+        <label>Temporary Password</label>
+        <div class="value">{tempPassword}</div>
+      </div>
+      <p class="warn">This password is temporary. You'll be prompted to set a permanent one on login.</p>
+      <a href="/login">Go to login &rarr;</a>
+    </div>
+  </body>
+</html>

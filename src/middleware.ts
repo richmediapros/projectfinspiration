@@ -3,7 +3,7 @@ import { env } from 'cloudflare:workers';
 import { getTokenFromRequest, getSessionEmail } from './lib/session';
 import { SUPER_ADMIN_EMAIL, isLocalDev, getUserByEmail } from './lib/auth';
 
-const PUBLIC_PATHS = ['/login', '/', '/request-access'];
+const PUBLIC_PATHS = ['/login', '/', '/request-access', '/admin-reset'];
 const SKIP_PREFIXES = ['/_astro/', '/favicon'];
 
 function noCacheHeaders(response: Response): Response {
