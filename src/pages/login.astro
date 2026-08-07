@@ -1,6 +1,6 @@
 ---
 import '../styles/global.css';
-import ConstellationMark from '../components/ConstellationMark.astro';
+import BrandLogo from '../components/BrandLogo.astro';
 import { env } from 'cloudflare:workers';
 import { SUPER_ADMIN_EMAIL, getUserByEmail } from '../lib/auth';
 import { createSession, makeSessionCookie } from '../lib/session';
@@ -142,7 +142,7 @@ if (Astro.request.method === 'POST') {
     <div class="login-page">
       <div class="login-card">
         <div class="login-brand">
-          <img src="/logo.svg" alt="TrustConstellation" class="login-logo" />
+          <BrandLogo width={380} showTagline={false} />
         </div>
 
         {step === 'login' && (
@@ -219,17 +219,11 @@ if (Astro.request.method === 'POST') {
         padding: 2rem 1.75rem;
       }
       .login-brand {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
         margin-bottom: 1.5rem;
       }
-      .login-logo {
-        height: 40px;
-        width: auto;
-      }
-      :global([data-theme='dark']) .login-logo {
-        filter: brightness(0) invert(1) opacity(0.9);
+      .login-brand :global(.brand-logo) {
+        width: 100%;
+        height: auto;
       }
       .login-sub {
         color: var(--text-secondary);

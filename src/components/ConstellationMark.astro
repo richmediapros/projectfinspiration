@@ -4,26 +4,33 @@ interface Props {
 }
 const { size = 28 } = Astro.props;
 ---
-<svg viewBox="0 0 32 32" width={size} height={size} fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" class="constellation-mark">
-  <!-- spokes from center hub -->
-  <line x1="16" y1="14" x2="8" y2="5" stroke="currentColor" stroke-width="0.8" opacity="0.25"/>
-  <line x1="16" y1="14" x2="14" y2="3" stroke="currentColor" stroke-width="0.8" opacity="0.25"/>
-  <line x1="16" y1="14" x2="4" y2="15" stroke="currentColor" stroke-width="0.8" opacity="0.25"/>
-  <line x1="16" y1="14" x2="8" y2="23" stroke="currentColor" stroke-width="0.8" opacity="0.25"/>
-  <line x1="16" y1="14" x2="14" y2="26" stroke="currentColor" stroke-width="0.8" opacity="0.25"/>
-  <line x1="16" y1="14" x2="23" y2="23" stroke="currentColor" stroke-width="0.8" opacity="0.25"/>
-  <line x1="16" y1="14" x2="27" y2="9" stroke="currentColor" stroke-width="0.8" opacity="0.25"/>
-  <!-- outer nodes (gray, varying sizes) -->
-  <circle cx="8" cy="5" r="2.2" fill="currentColor" opacity="0.35"/>
-  <circle cx="14" cy="3" r="1.2" fill="var(--accent)" opacity="0.7"/>
-  <circle cx="4" cy="15" r="2.8" fill="currentColor" opacity="0.35"/>
-  <circle cx="8" cy="23" r="1.8" fill="currentColor" opacity="0.45"/>
-  <circle cx="14" cy="26" r="1.4" fill="currentColor" opacity="0.3"/>
-  <circle cx="23" cy="23" r="2.0" fill="currentColor" opacity="0.35"/>
-  <circle cx="27" cy="9" r="1.2" fill="var(--accent)" opacity="0.7"/>
-  <!-- center hub -->
-  <circle cx="16" cy="14" r="3.2" fill="var(--accent)"/>
+<svg viewBox="12 8 120 120" width={size} height={size} fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" class="constellation-mark">
+  <g class="mark-lines">
+    <line x1="69.09" y1="23.8" x2="67.84" y2="56.46" stroke-linecap="round" stroke-miterlimit="10" stroke-width=".75"/>
+    <line x1="28.09" y1="31.79" x2="62.89" y2="18.63" stroke-linecap="round" stroke-miterlimit="10" stroke-width=".75"/>
+    <line x1="103.69" y1="100.84" x2="118" y2="82.1" stroke-linecap="round" stroke-miterlimit="10" stroke-width=".75"/>
+    <line x1="27.13" y1="38.38" x2="61.44" y2="59.71" stroke-linecap="round" stroke-miterlimit="10" stroke-width=".75"/>
+    <line x1="63.19" y1="68.61" x2="27.4" y2="107.17" stroke-linecap="round" stroke-miterlimit="10" stroke-width=".75"/>
+    <line x1="71.07" y1="68.76" x2="96.4" y2="100.3" stroke-linecap="round" stroke-miterlimit="10" stroke-width=".75"/>
+    <line x1="73.65" y1="64.96" x2="115" y2="75.63" stroke-linecap="round" stroke-miterlimit="10" stroke-width=".75"/>
+  </g>
+  <g class="mark-nodes">
+    <circle cx="21.66" cy="34.26" r="3.65"/>
+    <circle cx="69.51" cy="16.94" r="3.65"/>
+    <circle cx="121.23" cy="76.86" r="3.65"/>
+    <circle cx="100.04" cy="105.57" r="3.65"/>
+    <circle cx="21.66" cy="112.64" r="5.47"/>
+  </g>
+  <g class="mark-hub">
+    <circle cx="67.23" cy="63.19" r="3.65"/>
+  </g>
 </svg>
 <style>
   .constellation-mark { flex-shrink: 0; }
+  .mark-lines { stroke: var(--muted); }
+  .mark-nodes { fill: var(--muted); }
+  .mark-hub { fill: var(--accent); }
+  :root[data-theme='light'] .mark-lines { stroke: #7a8496; }
+  :root[data-theme='light'] .mark-nodes { fill: #7a8496; }
+  :root[data-theme='light'] .mark-hub { fill: #1e499c; }
 </style>
