@@ -142,8 +142,7 @@ if (Astro.request.method === 'POST') {
     <div class="login-page">
       <div class="login-card">
         <div class="login-brand">
-          <ConstellationMark size={28} />
-          <span class="login-brand-text">Trust<span class="login-brand-light">Constellation</span></span>
+          <img src="/logo.svg" alt="TrustConstellation" class="login-logo" />
         </div>
 
         {step === 'login' && (
@@ -225,15 +224,12 @@ if (Astro.request.method === 'POST') {
         gap: 0.5rem;
         margin-bottom: 1.5rem;
       }
-      .login-brand-text {
-        font-family: var(--font-heading);
-        font-weight: 700;
-        font-size: 1.15rem;
-        color: var(--text);
-        letter-spacing: -0.02em;
+      .login-logo {
+        height: 40px;
+        width: auto;
       }
-      .login-brand-light {
-        font-weight: 400;
+      :global([data-theme='dark']) .login-logo {
+        filter: brightness(0) invert(1) opacity(0.9);
       }
       .login-sub {
         color: var(--text-secondary);
