@@ -114,15 +114,15 @@ import Public from '../layouts/Public.astro';
 
     .hero-mark {
       position: absolute;
-      width: clamp(400px, 50vw, 700px);
+      width: clamp(320px, 40vw, 520px);
       height: auto;
       top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      opacity: 0.07;
+      right: 5%;
+      transform: translateY(-50%) perspective(800px) rotateX(0deg) rotateY(0deg);
+      opacity: 0.08;
       pointer-events: none;
       will-change: transform;
-      transition: transform 0.15s ease-out;
+      transition: transform 0.2s ease-out;
     }
     .hero-mark-lines { fill: none; stroke: var(--muted); }
     .hero-mark-nodes { fill: var(--muted); }
@@ -318,7 +318,8 @@ import Public from '../layouts/Public.astro';
         min-height: auto;
       }
       .hero-mark {
-        width: 300px;
+        width: 250px;
+        right: 2%;
       }
       .hero-ticker {
         gap: 2rem;
@@ -345,12 +346,12 @@ import Public from '../layouts/Public.astro';
     if (hero && mark) {
       hero.addEventListener('mousemove', (e) => {
         const rect = hero.getBoundingClientRect();
-        const x = ((e.clientX - rect.left) / rect.width - 0.5) * 30;
-        const y = ((e.clientY - rect.top) / rect.height - 0.5) * 30;
-        mark.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+        const rotateY = ((e.clientX - rect.left) / rect.width - 0.5) * 25;
+        const rotateX = ((e.clientY - rect.top) / rect.height - 0.5) * -25;
+        mark.style.transform = `translateY(-50%) perspective(800px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
       });
       hero.addEventListener('mouseleave', () => {
-        mark.style.transform = 'translate(-50%, -50%)';
+        mark.style.transform = 'translateY(-50%) perspective(800px) rotateX(0deg) rotateY(0deg)';
       });
     }
   </script>
