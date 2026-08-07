@@ -1,12 +1,62 @@
 ---
+import Public from '../layouts/Public.astro';
 ---
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Finspiration</title>
-</head>
-<body>
-  <h1>Finspiration</h1>
-</body>
-</html>
+<Public title="Finspiration – Vendor Intelligence for Banking">
+  <section class="hero">
+    <div class="hero-glow"></div>
+    <div class="hero-inner">
+      <span class="hero-badge">Built for State Banking Associations</span>
+      <h1>Vendor intelligence, built for your association</h1>
+      <p class="hero-sub">
+        One place to track, compare, and evaluate fintech vendors across your
+        entire association. Real data. Real feedback. No more spreadsheets.
+      </p>
+      <div class="hero-actions">
+        <a href="/login" class="btn btn-primary btn-lg">Get Started</a>
+        <a href="#how" class="btn btn-ghost btn-lg">See how it works &darr;</a>
+      </div>
+    </div>
+    <div class="hero-ticker">
+      <div class="ticker-item">
+        <span class="ticker-num">390+</span>
+        <span class="ticker-label">Vendors tracked</span>
+      </div>
+      <div class="ticker-item">
+        <span class="ticker-num">1</span>
+        <span class="ticker-label">Association</span>
+      </div>
+    </div>
+  </section>
+
+  <section id="how" class="how">
+    <h2>How it works</h2>
+    <ol class="steps">
+      <li class="step">
+        <span class="step-num">01</span>
+        <div>
+          <h3>Your association signs up</h3>
+          <p>We onboard your team and import your existing vendor roster — contracts, contacts, categories, all of it.</p>
+        </div>
+      </li>
+      <li class="step">
+        <span class="step-num">02</span>
+        <div>
+          <h3>Members start reviewing</h3>
+          <p>Bank members log in and leave structured feedback on the vendors they use. Ratings, comments, deal-breakers.</p>
+        </div>
+      </li>
+      <li class="step">
+        <span class="step-num">03</span>
+        <div>
+          <h3>Insights surface automatically</h3>
+          <p>See which vendors are trending, which are flagged, and how your association's choices compare to peers.</p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section class="cta-band">
+    <p>Ready to give your members better vendor intelligence?</p>
+    <a href="/login" class="btn btn-primary btn-lg">Get Started</a>
+  </section>
+</Public>
