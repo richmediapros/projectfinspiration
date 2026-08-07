@@ -19,6 +19,10 @@ export const onRequest = defineMiddleware(async (context, next) => {
     return next();
   }
 
+  if (PUBLIC_PATHS.includes(pathname)) {
+    return noCacheHeaders(await next());
+  }
+
   const db = env.DB;
 
   if (isLocalDev(context.request)) {
@@ -54,10 +58,6 @@ export const onRequest = defineMiddleware(async (context, next) => {
         return noCacheHeaders(await next());
       }
     }
-  }
-
-  if (PUBLIC_PATHS.includes(pathname)) {
-    return noCacheHeaders(await next());
   }
 
   const returnTo = `?return_to=${encodeURIComponent(pathname)}`;
