@@ -1,6 +1,6 @@
 ---
 import '../styles/global.css';
-import ConstellationMark from '../components/ConstellationMark.astro';
+import BrandLogo from '../components/BrandLogo.astro';
 
 interface Props {
   title?: string;
@@ -33,8 +33,7 @@ const { title = 'TrustConstellation' } = Astro.props;
     <header class="pub-header">
       <div class="pub-header-inner">
         <a href="/" class="pub-brand">
-          <ConstellationMark size={24} />
-          <span>Trust<span class="pub-brand-light">Constellation</span></span>
+          <BrandLogo width={200} showTagline={false} />
         </a>
         <nav class="pub-nav">
           <a href="/request-access">Request Access</a>
@@ -48,7 +47,8 @@ const { title = 'TrustConstellation' } = Astro.props;
     </main>
 
     <footer class="pub-footer">
-      <span>&copy; 2026 TrustConstellation &middot; Collective Insights. Confidence.</span>
+      <BrandLogo width={180} />
+      <span class="pub-footer-copy">&copy; 2026 TrustConstellation</span>
     </footer>
 
     <style>
@@ -77,16 +77,6 @@ const { title = 'TrustConstellation' } = Astro.props;
       .pub-brand {
         display: inline-flex;
         align-items: center;
-        gap: 0.5rem;
-        font-family: var(--font-heading);
-        font-weight: 700;
-        font-size: 1.05rem;
-        color: var(--text);
-        letter-spacing: -0.02em;
-      }
-      .pub-brand:hover { color: var(--text); }
-      .pub-brand-light {
-        font-weight: 400;
       }
       .pub-nav {
         display: flex;
@@ -116,11 +106,18 @@ const { title = 'TrustConstellation' } = Astro.props;
         color: var(--accent-hover) !important;
       }
       .pub-footer {
-        padding: 1.25rem 1.5rem;
+        padding: 1.5rem 1.5rem;
         border-top: 1px solid var(--border);
         color: var(--muted);
         font-size: 0.75rem;
         text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      .pub-footer-copy {
+        color: var(--muted);
       }
       @media (max-width: 540px) {
         .pub-header-inner {
