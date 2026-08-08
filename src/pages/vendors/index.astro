@@ -267,7 +267,7 @@ const isFiltered = !!(search || categoryFilter);
       background: transparent !important;
       padding: 0.7rem 2rem 0.7rem 2.5rem;
       font-size: 0.85rem;
-      color: var(--text-secondary);
+      color: var(--text);
       cursor: pointer;
       outline: none;
       box-shadow: none !important;
@@ -279,6 +279,13 @@ const isFiltered = !!(search || categoryFilter);
       min-width: 170px;
     }
     .category-select:hover {
+      color: var(--text);
+    }
+    :root[data-theme='dark'] .category-select {
+      color-scheme: dark;
+    }
+    .category-select option {
+      background: var(--bg);
       color: var(--text);
     }
     .filter-btn {
