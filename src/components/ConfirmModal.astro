@@ -1,0 +1,162 @@
+<div class="confirm-overlay" id="confirm-overlay">
+  <div class="confirm-modal">
+    <div class="confirm-icon">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    </div>
+    <p class="confirm-title" id="confirm-title">Are you sure?</p>
+    <p class="confirm-message" id="confirm-message"></p>
+    <div class="confirm-actions">
+      <button type="button" class="btn confirm-cancel" id="confirm-cancel">Cancel</button>
+      <button type="button" class="btn confirm-proceed" id="confirm-proceed">Delete</button>
+    </div>
+  </div>
+</div>
+
+<style>
+  .confirm-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 999;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+    padding: 1rem;
+  }
+  .confirm-overlay.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .confirm-modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.75rem;
+    max-width: 380px;
+    width: 100%;
+    text-align: center;
+    transform: scale(0.95) translateY(8px);
+    transition: transform 0.15s ease;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  }
+  :root[data-theme='dark'] .confirm-modal {
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  }
+  .confirm-overlay.open .confirm-modal {
+    transform: scale(1) translateY(0);
+  }
+  .confirm-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 999px;
+    background: var(--error-bg, rgba(239, 68, 68, 0.1));
+    color: var(--error-text, #ef4444);
+    margin-bottom: 1rem;
+  }
+  .confirm-title {
+    font-weight: 600;
+    font-size: 1.05rem;
+    margin: 0 0 0.5rem;
+    color: var(--text);
+  }
+  .confirm-message {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin: 0 0 1.5rem;
+    line-height: 1.5;
+  }
+  .confirm-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+  }
+  .confirm-cancel {
+    background: var(--surface-raised, var(--surface));
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 0.5rem 1.25rem;
+    border-radius: var(--radius-md);
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.12s ease;
+  }
+  .confirm-cancel:hover {
+    color: var(--text);
+    border-color: var(--border-hover);
+  }
+  .confirm-proceed {
+    background: var(--error-text, #ef4444);
+    border: 1px solid transparent;
+    color: #fff;
+    padding: 0.5rem 1.25rem;
+    border-radius: var(--radius-md);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.12s ease;
+  }
+  .confirm-proceed:hover {
+    opacity: 0.9;
+  }
+</style>
+
+<script is:inline>
+  (function () {
+    var overlay = document.getElementById('confirm-overlay');
+    var titleEl = document.getElementById('confirm-title');
+    var messageEl = document.getElementById('confirm-message');
+    var proceedBtn = document.getElementById('confirm-proceed');
+    var cancelBtn = document.getElementById('confirm-cancel');
+    var pendingForm = null;
+
+    function open(opts) {
+      titleEl.textContent = opts.title || 'Are you sure?';
+      messageEl.textContent = opts.message || '';
+      proceedBtn.textContent = opts.action || 'Delete';
+      pendingForm = opts.form || null;
+      overlay.classList.add('open');
+    }
+
+    function close() {
+      overlay.classList.remove('open');
+      pendingForm = null;
+    }
+
+    cancelBtn.addEventListener('click', close);
+
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) close();
+    });
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && overlay.classList.contains('open')) close();
+    });
+
+    proceedBtn.addEventListener('click', function () {
+      if (pendingForm) {
+        pendingForm.removeAttribute('data-confirm');
+        pendingForm.requestSubmit();
+      }
+      close();
+    });
+
+    document.addEventListener('submit', function (e) {
+      var form = e.target.closest('[data-confirm]');
+      if (!form) return;
+      e.preventDefault();
+      open({
+        title: form.getAttribute('data-confirm-title') || 'Are you sure?',
+        message: form.getAttribute('data-confirm') || '',
+        action: form.getAttribute('data-confirm-action') || 'Delete',
+        form: form,
+      });
+    });
+  })();
+</script>

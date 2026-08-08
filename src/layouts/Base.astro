@@ -3,6 +3,7 @@ import '../styles/global.css';
 import BrandLogo from '../components/BrandLogo.astro';
 import BrandLogoStack from '../components/BrandLogoStack.astro';
 import ScrollToTop from '../components/ScrollToTop.astro';
+import ConfirmModal from '../components/ConfirmModal.astro';
 import { isAdmin } from '../lib/auth';
 
 interface Props {
@@ -147,6 +148,7 @@ const isActive = (href: string) => {
     </div>
 
     <ScrollToTop />
+    <ConfirmModal />
 
     <style>
       /* ── Sidebar ─────────────────────────── */

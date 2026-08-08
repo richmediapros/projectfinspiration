@@ -159,7 +159,7 @@ if (Astro.request.method === 'POST') {
 
   <div class="danger-zone">
     <h3>Danger Zone</h3>
-    <form method="POST" onsubmit="return confirm('Permanently delete this vendor and all its ratings, notes, and associations?')">
+    <form method="POST" data-confirm="This vendor and all its ratings, notes, and association relationships will be permanently deleted. This cannot be undone." data-confirm-title="Delete this vendor?" data-confirm-action="Delete Vendor">
       <input type="hidden" name="action" value="delete" />
       <p>Permanently delete this vendor, including all ratings, notes, and association relationships.</p>
       <button type="submit" class="btn btn-danger">Delete Vendor</button>
