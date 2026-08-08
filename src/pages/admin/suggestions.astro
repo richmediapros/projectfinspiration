@@ -1,0 +1,259 @@
+---
+import Base from '../../layouts/Base.astro';
+import { requireAdmin } from '../../lib/auth';
+import { env } from 'cloudflare:workers';
+
+const forbidden = requireAdmin(Astro);
+if (forbidden) return forbidden;
+
+const db = env.DB;
+
+interface SuggestionRow {
+  id: string;
+  type: string;
+  vendor_id: string | null;
+  user_id: string;
+  suggested_data: string;
+  reason: string | null;
+  status: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  user_name: string;
+  user_email: string;
+  association_name: string | null;
+  vendor_name: string | null;
+  reviewer_name: string | null;
+}
+
+const statusFilter = Astro.url.searchParams.get('status') ?? 'pending';
+
+const suggestions = (await db
+  .prepare(`
+    SELECT s.*, u.name as user_name, u.email as user_email, a.name as association_name,
+           v.name as vendor_name, r.name as reviewer_name
+    FROM suggestions s
+    JOIN users u ON u.id = s.user_id
+    LEFT JOIN associations a ON a.id = u.association_id
+    LEFT JOIN vendors v ON v.id = s.vendor_id
+    LEFT JOIN users r ON r.id = s.reviewed_by
+    WHERE s.status = ?
+    ORDER BY s.created_at DESC
+  `)
+  .bind(statusFilter)
+  .all<SuggestionRow>()).results;
+
+interface CategoryRow { id: string; name: string; }
+const allCategories = (await db.prepare('SELECT id, name FROM categories ORDER BY name').all<CategoryRow>()).results;
+const catMap = new Map(allCategories.map(c => [c.id, c.name]));
+---
+
+<Base title="Suggestions | TrustConstellation">
+  <div class="page-header">
+    <h1>Vendor Suggestions</h1>
+  </div>
+
+  <div class="filter-tabs">
+    <a href="?status=pending" class:list={['tab', { active: statusFilter === 'pending' }]}>Pending</a>
+    <a href="?status=approved" class:list={['tab', { active: statusFilter === 'approved' }]}>Approved</a>
+    <a href="?status=rejected" class:list={['tab', { active: statusFilter === 'rejected' }]}>Rejected</a>
+  </div>
+
+  {suggestions.length === 0 ? (
+    <div class="empty-state">
+      <p>No {statusFilter} suggestions.</p>
+    </div>
+  ) : (
+    <div class="suggestions-list">
+      {suggestions.map((s) => {
+        const data = JSON.parse(s.suggested_data);
+        const catNames = (data.categories ?? []).map((id: string) => catMap.get(id)).filter(Boolean);
+        return (
+          <div class="suggestion-card">
+            <div class="suggestion-header">
+              <div class="suggestion-type">
+                <span class={`type-badge type-${s.type}`}>
+                  {s.type === 'new_vendor' ? 'New Vendor' : 'Edit'}
+                </span>
+                {s.type === 'edit_vendor' && s.vendor_name && (
+                  <a href={`/vendors/${s.vendor_id}`} class="vendor-link">{s.vendor_name}</a>
+                )}
+              </div>
+              <div class="suggestion-meta">
+                <span class="suggestion-user">{s.user_name}</span>
+                {s.association_name && <span class="suggestion-org">{s.association_name}</span>}
+                <span class="suggestion-date">{new Date(s.created_at + 'Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+              </div>
+            </div>
+
+            {s.reason && (
+              <div class="suggestion-reason">
+                <strong>Reason:</strong> {s.reason}
+              </div>
+            )}
+
+            <div class="suggestion-data">
+              <div class="data-grid">
+                <div class="data-item"><span class="data-label">Name</span><span class="data-value">{data.name}</span></div>
+                {data.website && <div class="data-item"><span class="data-label">Website</span><span class="data-value">{data.website}</span></div>}
+                {data.description && <div class="data-item data-full"><span class="data-label">Description</span><span class="data-value">{data.description}</span></div>}
+                {data.contact_name && <div class="data-item"><span class="data-label">Contact</span><span class="data-value">{data.contact_name}</span></div>}
+                {data.contact_email && <div class="data-item"><span class="data-label">Email</span><span class="data-value">{data.contact_email}</span></div>}
+                {data.contact_phone && <div class="data-item"><span class="data-label">Phone</span><span class="data-value">{data.contact_phone}</span></div>}
+                {data.address && <div class="data-item data-full"><span class="data-label">Address</span><span class="data-value">{data.address}</span></div>}
+                {catNames.length > 0 && (
+                  <div class="data-item data-full">
+                    <span class="data-label">Categories</span>
+                    <span class="data-value">{catNames.join(', ')}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {statusFilter === 'pending' && (
+              <div class="suggestion-actions">
+                <form method="POST" action={`/api/admin/suggestions/${s.id}/approve`}>
+                  <button type="submit" class="btn btn-primary btn-sm">Approve</button>
+                </form>
+                <form method="POST" action={`/api/admin/suggestions/${s.id}/reject`}>
+                  <button type="submit" class="btn btn-danger btn-sm">Reject</button>
+                </form>
+              </div>
+            )}
+
+            {statusFilter !== 'pending' && s.reviewer_name && (
+              <div class="suggestion-reviewed">
+                {s.status === 'approved' ? 'Approved' : 'Rejected'} by {s.reviewer_name}
+                {s.reviewed_at && ` on ${new Date(s.reviewed_at + 'Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  )}
+
+  <style>
+    .filter-tabs {
+      display: flex;
+      gap: 0.25rem;
+      margin-bottom: 1.25rem;
+    }
+    .tab {
+      padding: 0.45rem 1rem;
+      font-size: 0.85rem;
+      font-weight: 500;
+      border-radius: var(--radius-md);
+      color: var(--text-secondary);
+      text-decoration: none;
+      transition: all 0.12s ease;
+    }
+    .tab:hover { background: var(--surface-raised); color: var(--text); }
+    .tab.active { background: var(--accent-muted); color: var(--accent); }
+    .empty-state {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: var(--muted);
+      font-style: italic;
+    }
+    .suggestions-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      max-width: 900px;
+    }
+    .suggestion-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem;
+    }
+    .suggestion-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1rem;
+      margin-bottom: 0.75rem;
+      flex-wrap: wrap;
+    }
+    .suggestion-type {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .type-badge {
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 0.2rem 0.5rem;
+      border-radius: var(--radius-sm);
+    }
+    .type-new_vendor {
+      background: var(--accent-muted);
+      color: var(--accent);
+    }
+    .type-edit_vendor {
+      background: var(--surface-raised);
+      color: var(--text-secondary);
+    }
+    .vendor-link {
+      font-weight: 600;
+      font-size: 0.92rem;
+      color: var(--text);
+    }
+    .vendor-link:hover { color: var(--accent); }
+    .suggestion-meta {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      font-size: 0.78rem;
+      flex-wrap: wrap;
+    }
+    .suggestion-user { font-weight: 600; color: var(--text); }
+    .suggestion-org { color: var(--muted); }
+    .suggestion-date { color: var(--muted); }
+    .suggestion-reason {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.75rem;
+      padding: 0.5rem 0.75rem;
+      background: var(--surface-raised);
+      border-radius: var(--radius-md);
+    }
+    .suggestion-reason strong { color: var(--text); }
+    .suggestion-data { margin-bottom: 0.75rem; }
+    .data-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.4rem 1rem;
+      font-size: 0.84rem;
+    }
+    .data-full { grid-column: 1 / -1; }
+    .data-label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+    }
+    .data-value { color: var(--text); }
+    .data-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.1rem;
+    }
+    .suggestion-actions {
+      display: flex;
+      gap: 0.5rem;
+      padding-top: 0.5rem;
+      border-top: 1px solid var(--border);
+    }
+    .btn-sm { font-size: 0.8rem; padding: 0.35rem 0.75rem; }
+    .suggestion-reviewed {
+      font-size: 0.78rem;
+      color: var(--muted);
+      padding-top: 0.5rem;
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</Base>

@@ -1,0 +1,196 @@
+---
+import Base from '../../../layouts/Base.astro';
+import { env } from 'cloudflare:workers';
+
+const db = env.DB;
+const { id } = Astro.params;
+
+interface Vendor {
+  id: string;
+  name: string;
+  logo_url: string | null;
+  website: string | null;
+  description: string | null;
+  contact_name: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  address: string | null;
+}
+
+const vendor = await db.prepare('SELECT * FROM vendors WHERE id = ?').bind(id).first<Vendor>();
+if (!vendor) return new Response('Not found', { status: 404 });
+
+interface Category { id: string; name: string; }
+const allCategories = (await db.prepare('SELECT id, name FROM categories ORDER BY name').all<Category>()).results;
+
+const currentCatIds = new Set(
+  (await db.prepare('SELECT category_id FROM vendor_categories WHERE vendor_id = ?').bind(id).all<{ category_id: string }>())
+    .results.map((r) => r.category_id)
+);
+
+let error = '';
+let success = false;
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const name = String(form.get('name') ?? '').trim();
+  const reason = String(form.get('reason') ?? '').trim();
+
+  if (!name) {
+    error = 'Vendor name is required.';
+  } else {
+    const suggestedData = JSON.stringify({
+      name,
+      website: String(form.get('website') ?? '').trim() || null,
+      logo_url: String(form.get('logo_url') ?? '').trim() || null,
+      description: String(form.get('description') ?? '').trim() || null,
+      contact_name: String(form.get('contact_name') ?? '').trim() || null,
+      contact_email: String(form.get('contact_email') ?? '').trim() || null,
+      contact_phone: String(form.get('contact_phone') ?? '').trim() || null,
+      address: String(form.get('address') ?? '').trim() || null,
+      categories: form.getAll('categories').map(String),
+    });
+
+    await db
+      .prepare('INSERT INTO suggestions (id, type, vendor_id, user_id, suggested_data, reason) VALUES (?, ?, ?, ?, ?, ?)')
+      .bind(crypto.randomUUID(), 'edit_vendor', id, Astro.locals.userId!, suggestedData, reason || null)
+      .run();
+
+    success = true;
+  }
+}
+---
+
+<Base title={`Suggest Edit – ${vendor.name} | TrustConstellation`}>
+  <div class="page-header">
+    <div class="overline"><a href={`/vendors/${id}`}>{vendor.name}</a></div>
+    <h1>Suggest Edit</h1>
+    <p class="page-subtitle">Your changes will be reviewed by an administrator before being applied.</p>
+  </div>
+
+  {error && <div class="alert alert-error">{error}</div>}
+
+  {success ? (
+    <div class="alert alert-success">
+      Your suggestion has been submitted and will be reviewed by an administrator.
+      <a href={`/vendors/${id}`}>Back to {vendor.name}</a>
+    </div>
+  ) : (
+    <form method="POST" class="vendor-form">
+      <div class="form-section">
+        <h3>Reason for Edit</h3>
+        <div class="form-group">
+          <label for="reason">What would you like changed and why?</label>
+          <textarea id="reason" name="reason" rows="2" placeholder="e.g. Updated contact info, corrected description..."></textarea>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <h3>Basic Info</h3>
+        <div class="form-group">
+          <label for="name">Vendor name <span class="required">*</span></label>
+          <input type="text" id="name" name="name" value={vendor.name} required />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="website">Website</label>
+            <input type="url" id="website" name="website" value={vendor.website ?? ''} />
+          </div>
+          <div class="form-group">
+            <label for="logo_url">Logo URL</label>
+            <input type="url" id="logo_url" name="logo_url" value={vendor.logo_url ?? ''} />
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="description">Description</label>
+          <textarea id="description" name="description" rows="3">{vendor.description ?? ''}</textarea>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <h3>Categories</h3>
+        {allCategories.length === 0 ? (
+          <p class="form-hint">No categories yet.</p>
+        ) : (
+          <div class="checkbox-grid">
+            {allCategories.map((c) => (
+              <label class="checkbox-label">
+                <input type="checkbox" name="categories" value={c.id} checked={currentCatIds.has(c.id)} />
+                {c.name}
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div class="form-section">
+        <h3>Contact</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="contact_name">Name</label>
+            <input type="text" id="contact_name" name="contact_name" value={vendor.contact_name ?? ''} />
+          </div>
+          <div class="form-group">
+            <label for="contact_email">Email</label>
+            <input type="email" id="contact_email" name="contact_email" value={vendor.contact_email ?? ''} />
+          </div>
+          <div class="form-group" style="max-width: 180px">
+            <label for="contact_phone">Phone</label>
+            <input type="tel" id="contact_phone" name="contact_phone" value={vendor.contact_phone ?? ''} />
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="address">Address</label>
+          <input type="text" id="address" name="address" value={vendor.address ?? ''} />
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Submit Suggestion</button>
+        <a href={`/vendors/${id}`} class="btn btn-secondary">Cancel</a>
+      </div>
+    </form>
+  )}
+
+  <style>
+    .vendor-form { max-width: 680px; }
+    .page-subtitle { font-size: 0.88rem; color: var(--text-secondary); margin: 0.25rem 0 0; }
+    .form-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1rem;
+    }
+    .form-section h3 {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.75rem;
+    }
+    .form-row { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .form-row .form-group { flex: 1; min-width: 180px; }
+    .form-actions { display: flex; gap: 0.5rem; }
+    .overline a { color: var(--muted); transition: color 0.12s ease; }
+    .overline a:hover { color: var(--accent); }
+    .checkbox-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 0.35rem;
+    }
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.88rem;
+      padding: 0.35rem 0.5rem;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: background 0.1s ease;
+    }
+    .checkbox-label:hover { background: var(--surface-raised); }
+    .checkbox-label input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); }
+    .alert-success a { color: var(--accent); margin-left: 0.5rem; }
+  </style>
+</Base>

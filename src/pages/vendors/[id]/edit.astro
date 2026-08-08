@@ -1,6 +1,10 @@
 ---
 import Base from '../../../layouts/Base.astro';
+import { requireAdmin } from '../../../lib/auth';
 import { env } from 'cloudflare:workers';
+
+const forbidden = requireAdmin(Astro);
+if (forbidden) return forbidden;
 
 const db = env.DB;
 const { id } = Astro.params;
@@ -15,6 +19,7 @@ interface Vendor {
   contact_name: string | null;
   contact_email: string | null;
   contact_phone: string | null;
+  address: string | null;
 }
 
 let vendor = await db.prepare('SELECT * FROM vendors WHERE id = ?').bind(id).first<Vendor>();
@@ -50,6 +55,7 @@ if (Astro.request.method === 'POST') {
   const contactName = String(form.get('contact_name') ?? '').trim();
   const contactEmail = String(form.get('contact_email') ?? '').trim();
   const contactPhone = String(form.get('contact_phone') ?? '').trim();
+  const address = String(form.get('address') ?? '').trim();
   const selectedCategories = form.getAll('categories').map(String);
 
   if (!name) {
@@ -57,10 +63,10 @@ if (Astro.request.method === 'POST') {
   } else {
     await db
       .prepare(`UPDATE vendors SET name = ?, logo_url = ?, website = ?, description = ?,
-                contact_name = ?, contact_email = ?, contact_phone = ?, updated_at = datetime('now')
+                contact_name = ?, contact_email = ?, contact_phone = ?, address = ?, updated_at = datetime('now')
                 WHERE id = ?`)
       .bind(name, logoUrl || null, website || null, description || null,
-            contactName || null, contactEmail || null, contactPhone || null, id)
+            contactName || null, contactEmail || null, contactPhone || null, address || null, id)
       .run();
 
     await db.prepare('DELETE FROM vendor_categories WHERE vendor_id = ?').bind(id).run();
@@ -138,6 +144,10 @@ if (Astro.request.method === 'POST') {
           <label for="contact_phone">Phone</label>
           <input type="tel" id="contact_phone" name="contact_phone" value={vendor.contact_phone ?? ''} />
         </div>
+      </div>
+      <div class="form-group">
+        <label for="address">Address</label>
+        <input type="text" id="address" name="address" value={vendor.address ?? ''} />
       </div>
     </div>
 
