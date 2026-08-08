@@ -202,7 +202,7 @@ const myRels = Astro.locals.associationId
                     {n.association_name && <span class="note-org">{n.association_name}</span>}
                     <span class="note-date">{new Date(n.created_at + 'Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                     {n.user_id === Astro.locals.userId && (
-                      <form method="POST" action={`/api/vendors/${id}/notes/${n.id}/delete`} class="note-delete-form">
+                      <form method="POST" action={`/api/vendors/${id}/notes/${n.id}/delete`} class="note-delete-form" onsubmit="return confirm('Are you sure you want to delete this note? This action is permanent and cannot be undone.')">
                         <button type="submit" class="note-delete-btn" title="Delete note">
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
                         </button>
