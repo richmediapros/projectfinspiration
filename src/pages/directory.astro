@@ -85,12 +85,19 @@ const isFiltered = !!(search || assocFilter);
     <div class="user-grid">
       {users.map((u) => (
         <div class="user-card">
-          <div class="user-avatar">{u.name.charAt(0).toUpperCase()}</div>
-          <div class="user-details">
-            <div class="user-name">{u.name}</div>
-            {u.title && <div class="user-title">{u.title}</div>}
-            {u.association_name && <div class="user-assoc">{u.association_name}</div>}
-            <a href={`mailto:${u.email}`} class="user-email">{u.email}</a>
+          <div class="user-card-header">
+            <div class="user-avatar">{u.name.charAt(0).toUpperCase()}</div>
+            <div>
+              <div class="user-name">{u.name}</div>
+              {u.title && <div class="user-title">{u.title}</div>}
+            </div>
+          </div>
+          {u.association_name && <div class="user-assoc">{u.association_name}</div>}
+          <div class="user-card-footer">
+            <a href={`mailto:${u.email}`} class="user-email">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+              {u.email}
+            </a>
           </div>
         </div>
       ))}
@@ -240,51 +247,69 @@ const isFiltered = !!(search || assocFilter);
     }
     .user-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 0.75rem;
-      max-width: 900px;
+      grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
+      gap: 1rem;
     }
     .user-card {
-      display: flex;
-      gap: 0.75rem;
-      align-items: flex-start;
-      padding: 1rem;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
-      transition: border-color 0.12s ease;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
     }
-    .user-card:hover { border-color: var(--border-hover); }
+    .user-card:hover {
+      border-color: var(--accent-border);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+      transform: translateY(-2px);
+    }
+    :root[data-theme='dark'] .user-card:hover {
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    }
+    .user-card-header {
+      display: flex;
+      gap: 0.75rem;
+      align-items: flex-start;
+      margin-bottom: 0.75rem;
+    }
     .user-avatar {
       width: 40px;
       height: 40px;
-      border-radius: 50%;
+      border-radius: var(--radius-md);
       background: var(--accent-muted);
       color: var(--accent);
       display: flex;
       align-items: center;
       justify-content: center;
       font-weight: 700;
-      font-size: 0.9rem;
+      font-size: 1.1rem;
       flex-shrink: 0;
     }
-    .user-details { min-width: 0; }
     .user-name {
       font-weight: 600;
-      font-size: 0.92rem;
-      margin-bottom: 0.1rem;
+      font-size: 0.95rem;
+      margin-bottom: 0.2rem;
     }
     .user-title {
       font-size: 0.82rem;
       color: var(--text-secondary);
-      margin-bottom: 0.1rem;
     }
     .user-assoc {
-      font-size: 0.78rem;
-      color: var(--muted);
-      margin-bottom: 0.3rem;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      margin: 0 0 0.75rem;
+      flex: 1;
+    }
+    .user-card-footer {
+      display: flex;
+      align-items: center;
+      margin-top: auto;
     }
     .user-email {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
       font-size: 0.8rem;
       color: var(--accent);
     }
