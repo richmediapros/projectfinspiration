@@ -115,6 +115,43 @@ const myRels = Astro.locals.associationId
         .results.map((r) => r.relationship_type)
     )
   : new Set<string>();
+
+interface SimilarVendor {
+  id: string;
+  name: string;
+  logo_url: string | null;
+  description: string | null;
+  shared_count: number;
+  category_names: string | null;
+  thumbs_up: number;
+  thumbs_down: number;
+}
+
+const categoryIds = vendorCategories.map((c) => c.id);
+let similarVendors: SimilarVendor[] = [];
+
+if (categoryIds.length > 0) {
+  const placeholders = categoryIds.map(() => '?').join(',');
+  similarVendors = (await db
+    .prepare(`
+      SELECT v.id, v.name, v.logo_url, v.description,
+        COUNT(vc.category_id) as shared_count,
+        GROUP_CONCAT(DISTINCT c2.name) as category_names,
+        COALESCE(SUM(CASE WHEN r.rating = 'up' THEN 1 ELSE 0 END), 0) as thumbs_up,
+        COALESCE(SUM(CASE WHEN r.rating = 'down' THEN 1 ELSE 0 END), 0) as thumbs_down
+      FROM vendor_categories vc
+      JOIN vendors v ON v.id = vc.vendor_id
+      LEFT JOIN vendor_categories vc2 ON vc2.vendor_id = v.id
+      LEFT JOIN categories c2 ON c2.id = vc2.category_id
+      LEFT JOIN ratings r ON r.vendor_id = v.id
+      WHERE vc.category_id IN (${placeholders}) AND v.id != ?
+      GROUP BY v.id
+      ORDER BY shared_count DESC, v.name ASC
+      LIMIT 6
+    `)
+    .bind(...categoryIds, id)
+    .all<SimilarVendor>()).results;
+}
 ---
 
 <Base title={`${vendor.name} | TrustConstellation`}>
@@ -133,20 +170,19 @@ const myRels = Astro.locals.associationId
         )}
         <div>
           <h1>{vendor.name}</h1>
-          <div class="vendor-meta">
-            {vendorCategories.length > 0 && (
-              <div class="vendor-cats">
-                {vendorCategories.map((c) => (
-                  <span class="badge badge-neutral">{c.name}</span>
-                ))}
-              </div>
-            )}
-            {vendor.website && (
-              <a href={vendor.website.startsWith('http') ? vendor.website : `https://${vendor.website}`} target="_blank" rel="noopener" class="vendor-website">
-                {new URL(vendor.website.startsWith('http') ? vendor.website : `https://${vendor.website}`).hostname}
-              </a>
-            )}
-          </div>
+          {vendor.website && (
+            <a href={vendor.website.startsWith('http') ? vendor.website : `https://${vendor.website}`} target="_blank" rel="noopener" class="vendor-website">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+              {new URL(vendor.website.startsWith('http') ? vendor.website : `https://${vendor.website}`).hostname}
+            </a>
+          )}
+          {vendorCategories.length > 0 && (
+            <div class="vendor-cats">
+              {vendorCategories.map((c) => (
+                <span class="badge badge-neutral">{c.name}</span>
+              ))}
+            </div>
+          )}
         </div>
       </div>
       <div class="vendor-header-actions">
@@ -311,6 +347,56 @@ const myRels = Astro.locals.associationId
         </div>
       </div>
     </div>
+
+    {similarVendors.length > 0 && (
+      <div class="similar-section">
+        <h2>Similar Vendors</h2>
+        <div class="similar-grid">
+          {similarVendors.map((sv) => (
+            <a href={`/vendors/${sv.id}`} class="similar-card">
+              <div class="similar-card-header">
+                {sv.logo_url ? (
+                  <img src={sv.logo_url} alt="" class="similar-logo" />
+                ) : (
+                  <div class="similar-logo-placeholder">{sv.name.charAt(0)}</div>
+                )}
+                <div class="similar-card-info">
+                  <div class="similar-card-name">{sv.name}</div>
+                  {sv.category_names && (
+                    <div class="similar-card-cats">
+                      {sv.category_names.split(',').map((cat) => (
+                        <span class="badge badge-neutral">{cat}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              {sv.description && (
+                <p class="similar-card-desc">{sv.description.length > 100 ? sv.description.slice(0, 100) + '...' : sv.description}</p>
+              )}
+              <div class="similar-card-footer">
+                {(() => {
+                  const total = sv.thumbs_up + sv.thumbs_down;
+                  if (total === 0) return <span class="rating-none-sm">No ratings</span>;
+                  const s = Math.round((sv.thumbs_up / total) * 100);
+                  return (
+                    <span class={`rating-score-sm ${s >= 50 ? 'positive' : 'negative'}`}>
+                      {s >= 50 ? (
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+                      ) : (
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 16s-1.5-2-4-2-4 2-4 2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+                      )}
+                      {s}
+                    </span>
+                  );
+                })()}
+                <span class="similar-shared">{sv.shared_count} shared {sv.shared_count === 1 ? 'category' : 'categories'}</span>
+              </div>
+            </a>
+          ))}
+        </div>
+      </div>
+    )}
   </div>
 
   <style>
@@ -362,16 +448,23 @@ const myRels = Astro.locals.associationId
       font-size: 1.4rem;
       margin-bottom: 0.15rem;
     }
-    .vendor-meta {
-      display: flex;
-      gap: 0.75rem;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-    .vendor-cats { display: flex; gap: 0.25rem; }
     .vendor-website {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
       font-size: 0.82rem;
       color: var(--accent);
+      margin-bottom: 0.3rem;
+    }
+    .vendor-website svg {
+      flex-shrink: 0;
+      opacity: 0.7;
+    }
+    .vendor-website:hover svg { opacity: 1; }
+    .vendor-cats {
+      display: flex;
+      gap: 0.25rem;
+      flex-wrap: wrap;
     }
     .vendor-detail {
       max-width: 1100px;
@@ -639,6 +732,115 @@ const myRels = Astro.locals.associationId
       width: 16px;
       text-align: center;
       font-size: 0.75rem;
+    }
+    .similar-section {
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+    }
+    .similar-section h2 {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary);
+      margin-bottom: 0.75rem;
+    }
+    .similar-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 0.75rem;
+    }
+    .similar-card {
+      display: flex;
+      flex-direction: column;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1rem;
+      text-decoration: none;
+      color: var(--text);
+      transition: border-color 0.12s ease, box-shadow 0.12s ease;
+    }
+    .similar-card:hover {
+      border-color: var(--border-hover);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
+    :root[data-theme='dark'] .similar-card:hover {
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+    .similar-card-header {
+      display: flex;
+      gap: 0.65rem;
+      align-items: flex-start;
+      margin-bottom: 0.5rem;
+    }
+    .similar-logo {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-sm);
+      object-fit: contain;
+      background: var(--surface-raised);
+      flex-shrink: 0;
+    }
+    .similar-logo-placeholder {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-sm);
+      background: var(--accent-muted);
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.95rem;
+      flex-shrink: 0;
+    }
+    .similar-card-info {
+      min-width: 0;
+    }
+    .similar-card-name {
+      font-weight: 600;
+      font-size: 0.88rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .similar-card-cats {
+      display: flex;
+      gap: 0.2rem;
+      flex-wrap: wrap;
+      margin-top: 0.2rem;
+    }
+    .similar-card-cats .badge {
+      font-size: 0.65rem;
+      padding: 0.1rem 0.35rem;
+    }
+    .similar-card-desc {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      line-height: 1.45;
+      margin: 0 0 0.5rem;
+      flex: 1;
+    }
+    .similar-card-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.75rem;
+    }
+    .rating-none-sm {
+      color: var(--muted);
+    }
+    .rating-score-sm {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.2rem;
+      font-weight: 600;
+    }
+    .rating-score-sm.positive { color: var(--success-text, #22c55e); }
+    .rating-score-sm.negative { color: var(--error-text, #ef4444); }
+    .similar-shared {
+      color: var(--muted);
     }
   </style>
 </Base>
