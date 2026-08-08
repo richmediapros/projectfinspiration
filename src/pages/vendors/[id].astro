@@ -170,12 +170,6 @@ if (categoryIds.length > 0) {
         )}
         <div>
           <h1>{vendor.name}</h1>
-          {vendor.website && (
-            <a href={vendor.website.startsWith('http') ? vendor.website : `https://${vendor.website}`} target="_blank" rel="noopener" class="vendor-website">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
-              {new URL(vendor.website.startsWith('http') ? vendor.website : `https://${vendor.website}`).hostname}
-            </a>
-          )}
           {vendorCategories.length > 0 && (
             <div class="vendor-cats">
               {vendorCategories.map((c) => (
@@ -310,9 +304,15 @@ if (categoryIds.length > 0) {
         </div>
 
         <!-- Contact -->
-        {(vendor.contact_name || vendor.contact_email || vendor.contact_phone || vendor.address) && (
+        {(vendor.website || vendor.contact_name || vendor.contact_email || vendor.contact_phone || vendor.address) && (
           <div class="section-card">
             <h2>Contact</h2>
+            {vendor.website && (
+              <div class="contact-line">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+                <a href={vendor.website.startsWith('http') ? vendor.website : `https://${vendor.website}`} target="_blank" rel="noopener">{new URL(vendor.website.startsWith('http') ? vendor.website : `https://${vendor.website}`).hostname}</a>
+              </div>
+            )}
             {vendor.contact_name && (
               <div class="contact-line">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -362,13 +362,6 @@ if (categoryIds.length > 0) {
                 )}
                 <div class="similar-card-info">
                   <div class="similar-card-name">{sv.name}</div>
-                  {sv.category_names && (
-                    <div class="similar-card-cats">
-                      {sv.category_names.split(',').map((cat) => (
-                        <span class="badge badge-neutral">{cat}</span>
-                      ))}
-                    </div>
-                  )}
                 </div>
               </div>
               {sv.description && (
@@ -448,19 +441,6 @@ if (categoryIds.length > 0) {
       font-size: 1.4rem;
       margin-bottom: 0.15rem;
     }
-    .vendor-website {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.35rem;
-      font-size: 0.82rem;
-      color: var(--accent);
-      margin-bottom: 0.3rem;
-    }
-    .vendor-website svg {
-      flex-shrink: 0;
-      opacity: 0.7;
-    }
-    .vendor-website:hover svg { opacity: 1; }
     .vendor-cats {
       display: flex;
       gap: 0.25rem;
@@ -804,16 +784,6 @@ if (categoryIds.length > 0) {
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-    }
-    .similar-card-cats {
-      display: flex;
-      gap: 0.2rem;
-      flex-wrap: wrap;
-      margin-top: 0.2rem;
-    }
-    .similar-card-cats .badge {
-      font-size: 0.65rem;
-      padding: 0.1rem 0.35rem;
     }
     .similar-card-desc {
       font-size: 0.8rem;
