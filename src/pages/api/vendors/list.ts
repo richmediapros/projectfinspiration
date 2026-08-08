@@ -1,12 +1,14 @@
 import type { APIRoute } from 'astro';
 import { env } from 'cloudflare:workers';
 
-export const GET: APIRoute = async ({ url }) => {
+export const GET: APIRoute = async ({ url, locals }) => {
   const db = env.DB;
   const search = url.searchParams.get('q')?.trim() ?? '';
   const categoryFilter = url.searchParams.get('category') ?? '';
+  const scope = url.searchParams.get('scope') ?? 'all';
   const limit = Math.min(parseInt(url.searchParams.get('limit') || '40', 10), 100);
   const offset = parseInt(url.searchParams.get('offset') || '0', 10);
+  const userAssocId = locals.associationId as string | undefined;
 
   let query = `
     SELECT v.id, v.name, v.logo_url, v.website, v.description, v.created_at,
@@ -21,18 +23,26 @@ export const GET: APIRoute = async ({ url }) => {
   `;
 
   const binds: string[] = [];
+  let whereClause = '';
+
+  if (scope !== 'all' && userAssocId) {
+    whereClause += ` WHERE v.id IN (SELECT vendor_id FROM vendor_associations WHERE association_id = ? AND relationship_type = ?)`;
+    binds.push(userAssocId, scope);
+  }
 
   if (categoryFilter) {
-    query += ` WHERE v.id IN (SELECT vendor_id FROM vendor_categories WHERE category_id = ?)`;
+    whereClause += whereClause ? ' AND' : ' WHERE';
+    whereClause += ` v.id IN (SELECT vendor_id FROM vendor_categories WHERE category_id = ?)`;
     binds.push(categoryFilter);
   }
 
   if (search) {
-    query += categoryFilter ? ' AND' : ' WHERE';
-    query += ` (v.name LIKE ? OR v.description LIKE ?)`;
+    whereClause += whereClause ? ' AND' : ' WHERE';
+    whereClause += ` (v.name LIKE ? OR v.description LIKE ?)`;
     binds.push(`%${search}%`, `%${search}%`);
   }
 
+  query += whereClause;
   query += ` GROUP BY v.id ORDER BY v.name LIMIT ? OFFSET ?`;
   binds.push(String(limit), String(offset));
 

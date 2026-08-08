@@ -9,7 +9,21 @@ const db = env.DB;
 const url = Astro.url;
 const search = url.searchParams.get('q')?.trim() ?? '';
 const categoryFilter = url.searchParams.get('category') ?? '';
+const scope = url.searchParams.get('scope') ?? 'all';
 const PAGE_SIZE = 40;
+
+const userAssocId = Astro.locals.associationId as string | undefined;
+
+interface AssocInfo { member_term: string; }
+let memberTerm = 'Associate Member';
+let hasEndorsed = false;
+
+if (userAssocId) {
+  const assocInfo = await db.prepare('SELECT member_term FROM associations WHERE id = ?').bind(userAssocId).first<AssocInfo>();
+  if (assocInfo?.member_term) memberTerm = assocInfo.member_term;
+  const endorsedCount = await db.prepare('SELECT COUNT(*) as cnt FROM vendor_associations WHERE association_id = ? AND relationship_type = ?').bind(userAssocId, 'endorsed').first<{ cnt: number }>();
+  hasEndorsed = (endorsedCount?.cnt ?? 0) > 0;
+}
 
 interface Category {
   id: string;
@@ -50,14 +64,21 @@ const binds: string[] = [];
 const countBinds: string[] = [];
 let whereClause = '';
 
+if (scope !== 'all' && userAssocId) {
+  whereClause += ` WHERE v.id IN (SELECT vendor_id FROM vendor_associations WHERE association_id = ? AND relationship_type = ?)`;
+  binds.push(userAssocId, scope);
+  countBinds.push(userAssocId, scope);
+}
+
 if (categoryFilter) {
-  whereClause += ` WHERE v.id IN (SELECT vendor_id FROM vendor_categories WHERE category_id = ?)`;
+  whereClause += whereClause ? ' AND' : ' WHERE';
+  whereClause += ` v.id IN (SELECT vendor_id FROM vendor_categories WHERE category_id = ?)`;
   binds.push(categoryFilter);
   countBinds.push(categoryFilter);
 }
 
 if (search) {
-  whereClause += categoryFilter ? ' AND' : ' WHERE';
+  whereClause += whereClause ? ' AND' : ' WHERE';
   whereClause += ` (v.name LIKE ? OR v.description LIKE ?)`;
   binds.push(`%${search}%`, `%${search}%`);
   countBinds.push(`%${search}%`, `%${search}%`);
@@ -88,6 +109,7 @@ const isFiltered = !!(search || categoryFilter);
   </div>
 
   <form method="GET" class="filter-bar">
+    {scope !== 'all' && <input type="hidden" name="scope" value={scope} />}
     <div class="filter-bar-inner">
       <div class="search-group">
         <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -111,13 +133,23 @@ const isFiltered = !!(search || categoryFilter);
     {isFiltered && (
       <div class="filter-status">
         <span class="filter-count">{totalCount} {totalCount === 1 ? 'result' : 'results'}{search ? ` for "${search}"` : ''}{categoryFilter ? ` in ${categories.find(c => c.id === categoryFilter)?.name}` : ''}</span>
-        <a href="/vendors" class="filter-clear">
+        <a href={scope !== 'all' ? `/vendors?scope=${scope}` : '/vendors'} class="filter-clear">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           Clear filters
         </a>
       </div>
     )}
   </form>
+
+  {userAssocId && (
+    <div class="scope-chips" id="scope-chips">
+      <button type="button" class={`scope-chip ${scope === 'all' ? 'active' : ''}`} data-scope="all">All Vendors</button>
+      <button type="button" class={`scope-chip ${scope === 'member' ? 'active' : ''}`} data-scope="member">{memberTerm}s</button>
+      {hasEndorsed && (
+        <button type="button" class={`scope-chip ${scope === 'endorsed' ? 'active' : ''}`} data-scope="endorsed">Endorsed</button>
+      )}
+    </div>
+  )}
 
   {vendors.length === 0 ? (
     <div class="empty-state">
@@ -340,6 +372,32 @@ const isFiltered = !!(search || categoryFilter);
         margin: 0.35rem;
       }
     }
+    .scope-chips {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .scope-chip {
+      padding: 0.35rem 0.85rem;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .scope-chip:hover {
+      border-color: var(--accent-border);
+      color: var(--text);
+    }
+    .scope-chip.active {
+      background: var(--accent-muted);
+      border-color: var(--accent-border);
+      color: var(--accent);
+      font-weight: 600;
+    }
     .empty-state {
       text-align: center;
       padding: 4rem 1rem;
@@ -470,7 +528,7 @@ const isFiltered = !!(search || categoryFilter);
     }
   </style>
 
-  <script is:inline define:vars={{ search, categoryFilter, PAGE_SIZE, totalCount }}>
+  <script is:inline define:vars={{ search, categoryFilter, scope, PAGE_SIZE, totalCount }}>
     (function () {
       var searchInput = document.getElementById('vendor-search');
       var categorySelect = document.getElementById('vendor-category');
@@ -484,6 +542,22 @@ const isFiltered = !!(search || categoryFilter);
 
       if (searchInput) searchInput.addEventListener('input', updateBtn);
       if (categorySelect) categorySelect.addEventListener('change', updateBtn);
+
+      var scopeChips = document.getElementById('scope-chips');
+      if (scopeChips) {
+        scopeChips.addEventListener('click', function (e) {
+          var btn = e.target.closest('.scope-chip');
+          if (!btn) return;
+          var newScope = btn.getAttribute('data-scope');
+          var params = new URLSearchParams(window.location.search);
+          if (newScope === 'all') {
+            params.delete('scope');
+          } else {
+            params.set('scope', newScope);
+          }
+          window.location.href = '/vendors' + (params.toString() ? '?' + params.toString() : '');
+        });
+      }
 
       var grid = document.getElementById('vendor-grid');
       var sentinel = document.getElementById('scroll-sentinel');
@@ -559,6 +633,7 @@ const isFiltered = !!(search || categoryFilter);
         var params = new URLSearchParams();
         if (search) params.set('q', search);
         if (categoryFilter) params.set('category', categoryFilter);
+        if (scope && scope !== 'all') params.set('scope', scope);
         params.set('limit', String(PAGE_SIZE));
         params.set('offset', String(offset));
 
