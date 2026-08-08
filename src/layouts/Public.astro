@@ -1,6 +1,7 @@
 ---
 import '../styles/global.css';
 import BrandLogo from '../components/BrandLogo.astro';
+import ScrollToTop from '../components/ScrollToTop.astro';
 
 interface Props {
   title?: string;
@@ -46,6 +47,8 @@ const { title = 'TrustConstellation' } = Astro.props;
     <main class="pub-main">
       <slot />
     </main>
+
+    <ScrollToTop />
 
     <footer class="pub-footer">
       <BrandLogo width={180} />

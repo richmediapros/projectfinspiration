@@ -2,6 +2,7 @@
 import '../styles/global.css';
 import BrandLogo from '../components/BrandLogo.astro';
 import BrandLogoStack from '../components/BrandLogoStack.astro';
+import ScrollToTop from '../components/ScrollToTop.astro';
 import { isAdmin } from '../lib/auth';
 
 interface Props {
@@ -144,6 +145,8 @@ const isActive = (href: string) => {
         </div>
       </main>
     </div>
+
+    <ScrollToTop />
 
     <style>
       /* ── Sidebar ─────────────────────────── */
