@@ -133,6 +133,8 @@ const isActive = (href: string) => {
         </div>
       </aside>
 
+      <div class="sidebar-backdrop" data-sidebar-backdrop></div>
+
       <div class="mobile-header">
         <a href="/dashboard" class="mobile-brand">Trust<span class="brand-light">Constellation</span></a>
         <button type="button" class="mobile-menu-btn" data-mobile-toggle aria-label="Open menu">
@@ -314,6 +316,19 @@ const isActive = (href: string) => {
         padding: 0.4rem;
       }
 
+      .sidebar-backdrop {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.4);
+        z-index: 89;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+      }
+      .sidebar-backdrop.visible {
+        opacity: 1;
+      }
+
       @media (max-width: 768px) {
         .app-main {
           padding-top: 56px;
@@ -321,6 +336,9 @@ const isActive = (href: string) => {
         .app-sidebar.open {
           display: flex;
           box-shadow: 4px 0 24px rgba(0, 0, 0, 0.3);
+        }
+        .app-sidebar.open ~ .sidebar-backdrop {
+          display: block;
         }
       }
     </style>
@@ -339,14 +357,27 @@ const isActive = (href: string) => {
 
       const mobileToggle = document.querySelector('[data-mobile-toggle]');
       const sidebar = document.querySelector('.app-sidebar');
-      if (mobileToggle && sidebar) {
+      const backdrop = document.querySelector('[data-sidebar-backdrop]') as HTMLElement | null;
+
+      function closeSidebar() {
+        if (!sidebar || !backdrop) return;
+        sidebar.classList.remove('open');
+        backdrop.classList.remove('visible');
+      }
+
+      if (mobileToggle && sidebar && backdrop) {
         mobileToggle.addEventListener('click', () => {
+          const opening = !sidebar.classList.contains('open');
           sidebar.classList.toggle('open');
-        });
-        sidebar.addEventListener('click', (e) => {
-          if ((e.target as HTMLElement).closest('a')) {
-            sidebar.classList.remove('open');
+          if (opening) {
+            requestAnimationFrame(() => backdrop.classList.add('visible'));
+          } else {
+            backdrop.classList.remove('visible');
           }
+        });
+        backdrop.addEventListener('click', closeSidebar);
+        sidebar.addEventListener('click', (e) => {
+          if ((e.target as HTMLElement).closest('a')) closeSidebar();
         });
       }
     </script>

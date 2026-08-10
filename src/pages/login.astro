@@ -164,6 +164,7 @@ if (Astro.request.method === 'POST') {
                 <input type="password" id="password" name="password" required />
               </div>
               <button type="submit" class="btn btn-primary login-submit">Sign in</button>
+              <p class="forgot-hint">Forgot your password? Contact your association administrator for a reset.</p>
             </form>
           </Fragment>
         )}
@@ -245,6 +246,13 @@ if (Astro.request.method === 'POST') {
         width: 100%;
         justify-content: center;
         margin-top: 0.25rem;
+      }
+      .forgot-hint {
+        font-size: 0.78rem;
+        color: var(--muted);
+        text-align: center;
+        margin: 0.85rem 0 0;
+        line-height: 1.4;
       }
       .login-links {
         display: flex;

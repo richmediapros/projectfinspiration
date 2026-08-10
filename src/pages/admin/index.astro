@@ -12,6 +12,7 @@ const userCount = await db.prepare('SELECT COUNT(*) as count FROM users').first<
 const assocCount = await db.prepare('SELECT COUNT(*) as count FROM associations').first<{ count: number }>();
 const vendorCount = await db.prepare('SELECT COUNT(*) as count FROM vendors').first<{ count: number }>();
 const pendingCount = await db.prepare("SELECT COUNT(*) as count FROM access_requests WHERE status = 'pending'").first<{ count: number }>();
+const pendingSuggestions = await db.prepare("SELECT COUNT(*) as count FROM suggestions WHERE status = 'pending'").first<{ count: number }>();
 ---
 
 <Base title="Admin | TrustConstellation">
@@ -55,6 +56,14 @@ const pendingCount = await db.prepare("SELECT COUNT(*) as count FROM access_requ
     <a href="/admin/categories" class="admin-link-card">
       <h3>Categories</h3>
       <p>Manage vendor categories.</p>
+    </a>
+    <a href="/admin/suggestions" class="admin-link-card">
+      <h3>Suggestions {(pendingSuggestions?.count ?? 0) > 0 && <span class="badge badge-accent">{pendingSuggestions?.count}</span>}</h3>
+      <p>Review vendor suggestions from users.</p>
+    </a>
+    <a href="/admin/activity" class="admin-link-card">
+      <h3>Activity Log</h3>
+      <p>View login history and system events.</p>
     </a>
   </div>
 
