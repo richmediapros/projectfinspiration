@@ -134,42 +134,6 @@ if (Astro.request.method === 'POST') {
   <style>
     .vendor-form { max-width: 680px; }
     .page-subtitle { font-size: 0.88rem; color: var(--text-secondary); margin: 0.25rem 0 0; }
-    .form-section {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      padding: 1.25rem 1.5rem;
-      margin-bottom: 1rem;
-    }
-    .form-section h3 {
-      font-size: 0.85rem;
-      color: var(--text-secondary);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin-bottom: 0.75rem;
-    }
-    .form-row { display: flex; gap: 1rem; flex-wrap: wrap; }
-    .form-row .form-group { flex: 1; min-width: 180px; }
-    .form-actions { display: flex; gap: 0.5rem; }
-    .overline a { color: var(--muted); transition: color 0.12s ease; }
-    .overline a:hover { color: var(--accent); }
-    .checkbox-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-      gap: 0.35rem;
-    }
-    .checkbox-label {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      font-size: 0.88rem;
-      padding: 0.35rem 0.5rem;
-      border-radius: var(--radius-sm);
-      cursor: pointer;
-      transition: background 0.1s ease;
-    }
-    .checkbox-label:hover { background: var(--surface-raised); }
-    .checkbox-label input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); }
     .alert-success a { color: var(--accent); margin-left: 0.5rem; }
   </style>
 </Base>

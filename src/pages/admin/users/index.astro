@@ -166,24 +166,7 @@ const associations = (await db
       border-radius: var(--radius-lg);
       padding: 1.5rem;
     }
-    .form-row {
-      display: flex;
-      gap: 1rem;
-      flex-wrap: wrap;
-    }
-    .form-row .form-group { flex: 1; min-width: 200px; }
-    .temp-pass-block {
-      margin-top: 0.5rem;
-      padding: 0.75rem;
-      background: var(--surface);
-      border-radius: var(--radius-md);
-    }
-    .temp-pass-block code {
-      font-size: 1.1rem;
-      font-weight: 600;
-      color: var(--accent);
-      user-select: all;
-    }
+    .form-row .form-group { min-width: 200px; }
     .user-list {
       display: flex;
       flex-direction: column;

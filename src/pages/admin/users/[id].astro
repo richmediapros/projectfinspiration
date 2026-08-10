@@ -184,9 +184,7 @@ const associations = (await db
       max-width: 640px;
       margin-bottom: 1.5rem;
     }
-    .form-row { display: flex; gap: 1rem; flex-wrap: wrap; }
-    .form-row .form-group { flex: 1; min-width: 180px; }
-    .form-actions { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+    .form-actions { margin-top: 0.5rem; }
     .actions-card {
       max-width: 640px;
       background: var(--surface);
@@ -197,28 +195,5 @@ const associations = (await db
     }
     .actions-card h3 { font-size: 0.9rem; margin-bottom: 0.25rem; }
     .actions-card p { font-size: 0.85rem; color: var(--text-secondary); margin: 0 0 0.75rem; }
-    .overline a { color: var(--muted); transition: color 0.12s ease; }
-    .overline a:hover { color: var(--accent); }
-    .temp-pass-block {
-      margin-top: 0.5rem;
-      padding: 0.75rem;
-      background: var(--surface);
-      border-radius: var(--radius-md);
-    }
-    .temp-pass-block code {
-      font-size: 1.1rem;
-      font-weight: 600;
-      color: var(--accent);
-      user-select: all;
-    }
-    .danger-zone {
-      max-width: 640px;
-      border: 1px solid var(--error-border);
-      border-radius: var(--radius-lg);
-      padding: 1.25rem 1.5rem;
-      background: var(--error-bg);
-    }
-    .danger-zone h3 { font-size: 0.9rem; color: var(--error-text); margin-bottom: 0.35rem; }
-    .danger-zone p { font-size: 0.85rem; color: var(--text-secondary); margin: 0 0 0.75rem; }
   </style>
 </Base>

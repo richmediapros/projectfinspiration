@@ -58,6 +58,8 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
     .bind(locals.userId, id)
     .run();
 
-  const referer = request.headers.get('referer') || '/admin/suggestions';
-  return new Response(null, { status: 302, headers: { Location: referer } });
+  let redirect = '/admin/suggestions';
+  const ref = request.headers.get('referer');
+  if (ref) try { redirect = new URL(ref).pathname; } catch {}
+  return new Response(null, { status: 302, headers: { Location: redirect } });
 };

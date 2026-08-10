@@ -119,38 +119,7 @@ if (Astro.request.method === 'POST') {
       max-width: 640px;
       margin-bottom: 2rem;
     }
-    .form-row {
-      display: flex;
-      gap: 1rem;
-      flex-wrap: wrap;
-    }
-    .form-row .form-group { flex: 1; min-width: 0; }
-    .form-actions {
-      display: flex;
-      gap: 0.5rem;
-      margin-top: 0.5rem;
-    }
-    .overline a {
-      color: var(--muted);
-      transition: color 0.12s ease;
-    }
-    .overline a:hover { color: var(--accent); }
-    .danger-zone {
-      max-width: 640px;
-      border: 1px solid var(--error-border);
-      border-radius: var(--radius-lg);
-      padding: 1.25rem 1.5rem;
-      background: var(--error-bg);
-    }
-    .danger-zone h3 {
-      font-size: 0.9rem;
-      color: var(--error-text);
-      margin-bottom: 0.35rem;
-    }
-    .danger-zone p {
-      font-size: 0.85rem;
-      color: var(--text-secondary);
-      margin: 0 0 0.75rem;
-    }
+    .form-row .form-group { min-width: 0; }
+    .form-actions { margin-top: 0.5rem; }
   </style>
 </Base>

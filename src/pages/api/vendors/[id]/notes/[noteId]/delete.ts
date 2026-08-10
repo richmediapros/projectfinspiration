@@ -18,6 +18,8 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
 
   await db.prepare('DELETE FROM notes WHERE id = ?').bind(noteId).run();
 
-  const referer = request.headers.get('referer') || `/vendors/${vendorId}`;
-  return new Response(null, { status: 302, headers: { Location: referer } });
+  let redirect = `/vendors/${vendorId}`;
+  const ref = request.headers.get('referer');
+  if (ref) try { redirect = new URL(ref).pathname; } catch {}
+  return new Response(null, { status: 302, headers: { Location: redirect } });
 };

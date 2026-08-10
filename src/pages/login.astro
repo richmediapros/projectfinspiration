@@ -20,11 +20,13 @@ let email = '';
 let tempPassword = '';
 let error = '';
 let returnTo = Astro.url.searchParams.get('return_to') || '/dashboard';
+if (!returnTo.startsWith('/') || returnTo.startsWith('//')) returnTo = '/dashboard';
 
 if (Astro.request.method === 'POST') {
   const form = await Astro.request.formData();
   const action = String(form.get('action') ?? '');
   returnTo = String(form.get('return_to') ?? '/dashboard');
+  if (!returnTo.startsWith('/') || returnTo.startsWith('//')) returnTo = '/dashboard';
   const db = env.DB;
 
   if (action === 'login') {

@@ -78,6 +78,7 @@ const notes = (await db
     LEFT JOIN associations a ON a.id = u.association_id
     WHERE n.vendor_id = ?
     ORDER BY n.created_at DESC
+    LIMIT 50
   `)
   .bind(id)
   .all<NoteRow>()).results;
@@ -528,27 +529,13 @@ if (categoryIds.length > 0) {
     @media (max-width: 768px) {
       .vendor-columns { grid-template-columns: 1fr; }
     }
-    .section-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      padding: 1.25rem;
-      margin-bottom: 1rem;
-    }
-    .section-card h2 {
-      font-size: 0.85rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--text-secondary);
-      margin-bottom: 0.75rem;
-    }
+    .section-card { margin-bottom: 1rem; }
     .note-form {
       margin-bottom: 1rem;
     }
     .note-form textarea {
       margin-bottom: 0.5rem;
     }
-    .btn-sm { font-size: 0.8rem; padding: 0.35rem 0.75rem; }
     .notes-list {
       display: flex;
       flex-direction: column;
@@ -589,11 +576,6 @@ if (categoryIds.length > 0) {
       color: var(--text-secondary);
       margin: 0;
       line-height: 1.5;
-    }
-    .empty-sm {
-      color: var(--muted);
-      font-size: 0.85rem;
-      font-style: italic;
     }
     .assoc-rel-list {
       display: flex;
