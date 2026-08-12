@@ -1,0 +1,473 @@
+---
+import Base from '../../layouts/Base.astro';
+import { env } from 'cloudflare:workers';
+
+const db = env.DB;
+const url = Astro.url;
+const search = url.searchParams.get('q')?.trim() ?? '';
+const topicFilter = url.searchParams.get('topic')?.trim() ?? '';
+const PAGE_SIZE = 40;
+
+interface TopicRow { topics: string; }
+const topicRows = (await db
+  .prepare('SELECT DISTINCT topics FROM speakers WHERE active = 1 AND topics IS NOT NULL AND topics != ?')
+  .bind('')
+  .all<TopicRow>()).results;
+
+const allTopics = [...new Set(
+  topicRows.flatMap((r) => r.topics.split(',').map((t) => t.trim()).filter(Boolean))
+)].sort((a, b) => a.localeCompare(b));
+
+interface SpeakerRow {
+  id: string;
+  vendor_id: string;
+  name: string;
+  title: string | null;
+  photo_url: string | null;
+  topics: string | null;
+  bio: string | null;
+  vendor_name: string;
+  vendor_logo: string | null;
+  thumbs_up: number;
+  thumbs_down: number;
+}
+
+let countQuery = `SELECT COUNT(DISTINCT s.id) as total FROM speakers s JOIN vendors v ON v.id = s.vendor_id`;
+let query = `
+  SELECT s.id, s.vendor_id, s.name, s.title, s.photo_url, s.topics, s.bio,
+    v.name as vendor_name, v.logo_url as vendor_logo,
+    COALESCE(SUM(CASE WHEN sr.rating = 'up' THEN 1 ELSE 0 END), 0) as thumbs_up,
+    COALESCE(SUM(CASE WHEN sr.rating = 'down' THEN 1 ELSE 0 END), 0) as thumbs_down
+  FROM speakers s
+  JOIN vendors v ON v.id = s.vendor_id
+  LEFT JOIN speaker_ratings sr ON sr.speaker_id = s.id
+`;
+
+const binds: string[] = [];
+const countBinds: string[] = [];
+let whereClause = ' WHERE s.active = 1';
+
+if (search) {
+  whereClause += ` AND (s.name LIKE ? OR s.bio LIKE ? OR s.topics LIKE ? OR s.title LIKE ?)`;
+  binds.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+  countBinds.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+}
+
+if (topicFilter) {
+  whereClause += ` AND (',' || s.topics || ',' LIKE ?)`;
+  binds.push(`%,${topicFilter},%`);
+  countBinds.push(`%,${topicFilter},%`);
+}
+
+countQuery += whereClause;
+query += whereClause;
+query += ` GROUP BY s.id ORDER BY s.name LIMIT ${PAGE_SIZE}`;
+
+const totalResult = await db.prepare(countQuery).bind(...countBinds).first<{ total: number }>();
+const totalCount = totalResult?.total ?? 0;
+const speakers = (await db.prepare(query).bind(...binds).all<SpeakerRow>()).results;
+const hasMore = speakers.length < totalCount;
+const isFiltered = !!(search || topicFilter);
+---
+
+<Base title="Speakers | TrustConstellation">
+  <div class="page-header">
+    <div class="page-header-left">
+      <h1>Speakers</h1>
+      <span class="speaker-count">{totalCount}</span>
+    </div>
+  </div>
+
+  <form method="GET" class="filter-bar">
+    <div class="filter-bar-inner">
+      <div class="search-group">
+        <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" name="q" value={search} placeholder="Search speakers by name, topic, bio..." class="search-input" id="speaker-search" />
+      </div>
+      {allTopics.length > 0 && (
+        <>
+          <div class="filter-divider"></div>
+          <div class="category-group">
+            <svg class="category-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+            <select name="topic" class="category-select" id="speaker-topic">
+              <option value="">All topics</option>
+              {allTopics.map((t) => (
+                <option value={t} selected={t === topicFilter}>{t}</option>
+              ))}
+            </select>
+          </div>
+        </>
+      )}
+      <button type="submit" class="btn btn-primary filter-btn" id="filter-btn" disabled={!isFiltered}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        Search
+      </button>
+    </div>
+    {isFiltered && (
+      <div class="filter-status">
+        <span class="filter-count">{totalCount} {totalCount === 1 ? 'result' : 'results'}{search ? ` for "${search}"` : ''}{topicFilter ? ` in "${topicFilter}"` : ''}</span>
+        <a href="/speakers" class="filter-clear">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          Clear filters
+        </a>
+      </div>
+    )}
+  </form>
+
+  {speakers.length === 0 ? (
+    <div class="empty-state">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+      <p>{isFiltered ? 'No speakers match your filters.' : 'No speakers listed yet.'}</p>
+    </div>
+  ) : (
+    <div class="speaker-grid" id="speaker-grid">
+      {speakers.map((sp) => {
+        const total = sp.thumbs_up + sp.thumbs_down;
+        const score = total > 0 ? Math.round((sp.thumbs_up / total) * 100) : null;
+        const spTopics = sp.topics ? sp.topics.split(',').map((t) => t.trim()).filter(Boolean) : [];
+        return (
+          <a href={`/vendors/${sp.vendor_id}/speakers/${sp.id}`} class="speaker-card">
+            <div class="speaker-card-header">
+              {sp.photo_url ? (
+                <img src={sp.photo_url} alt="" class="speaker-photo" />
+              ) : (
+                <div class="speaker-photo-placeholder">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                </div>
+              )}
+              <div class="speaker-card-info">
+                <div class="speaker-card-name">{sp.name}</div>
+                {sp.title && <div class="speaker-card-title">{sp.title}</div>}
+                <div class="speaker-card-vendor">
+                  {sp.vendor_logo ? (
+                    <img src={sp.vendor_logo} alt="" class="speaker-vendor-logo" />
+                  ) : (
+                    <span class="speaker-vendor-dot">{sp.vendor_name.charAt(0)}</span>
+                  )}
+                  {sp.vendor_name}
+                </div>
+              </div>
+              <div class="speaker-card-score">
+                {score !== null ? (
+                  <span class={`rating-score ${score >= 50 ? 'positive' : 'negative'}`}>
+                    {score >= 50 ? (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+                    ) : (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 16s-1.5-2-4-2-4 2-4 2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+                    )}
+                    {score}
+                  </span>
+                ) : (
+                  <span class="rating-none">No ratings</span>
+                )}
+              </div>
+            </div>
+            {sp.bio && (
+              <p class="speaker-card-bio">{sp.bio.length > 120 ? sp.bio.slice(0, 120) + '...' : sp.bio}</p>
+            )}
+            {spTopics.length > 0 && (
+              <div class="speaker-card-topics">
+                {spTopics.slice(0, 4).map((t) => (
+                  <span class="speaker-topic-tag">{t}</span>
+                ))}
+                {spTopics.length > 4 && <span class="speaker-topic-more">+{spTopics.length - 4}</span>}
+              </div>
+            )}
+          </a>
+        );
+      })}
+    </div>
+  )}
+
+  {hasMore && (
+    <div id="scroll-sentinel" class="scroll-sentinel">
+      <div class="loading-spinner"></div>
+    </div>
+  )}
+
+  <style>
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    .page-header-left {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .speaker-count {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 28px;
+      height: 28px;
+      padding: 0 0.5rem;
+      border-radius: 999px;
+      background: var(--accent-muted);
+      color: var(--accent);
+      font-size: 0.8rem;
+      font-weight: 700;
+    }
+    .empty-state {
+      text-align: center;
+      padding: 4rem 1rem;
+      color: var(--muted);
+    }
+    .empty-state svg { margin-bottom: 1rem; }
+    .empty-state p { margin: 0 0 1.5rem; font-size: 0.95rem; }
+  </style>
+  <style is:global>
+    .speaker-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr));
+      gap: 1rem;
+    }
+    .speaker-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem;
+      color: inherit;
+      display: flex;
+      flex-direction: column;
+      transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+    }
+    .speaker-card:hover {
+      border-color: var(--accent-border);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+      transform: translateY(-2px);
+      color: inherit;
+    }
+    :root[data-theme='dark'] .speaker-card:hover {
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    }
+    .speaker-card-header {
+      display: flex;
+      gap: 0.75rem;
+      align-items: flex-start;
+      margin-bottom: 0.65rem;
+    }
+    .speaker-photo {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: var(--surface-raised);
+      flex-shrink: 0;
+    }
+    .speaker-photo-placeholder {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: var(--accent-muted);
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .speaker-card-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .speaker-card-name {
+      font-weight: 600;
+      font-size: 0.95rem;
+      margin-bottom: 0.1rem;
+    }
+    .speaker-card-title {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.3rem;
+    }
+    .speaker-card-vendor {
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+    .speaker-vendor-logo {
+      width: 16px;
+      height: 16px;
+      border-radius: 3px;
+      object-fit: contain;
+      background: var(--surface-raised);
+    }
+    .speaker-vendor-dot {
+      width: 16px;
+      height: 16px;
+      border-radius: 3px;
+      background: var(--accent-muted);
+      color: var(--accent);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.55rem;
+    }
+    .speaker-card-score {
+      flex-shrink: 0;
+    }
+    .speaker-card-bio {
+      font-size: 0.84rem;
+      color: var(--text-secondary);
+      margin: 0 0 0.65rem;
+      line-height: 1.45;
+      flex: 1;
+    }
+    .speaker-card-topics {
+      display: flex;
+      gap: 0.25rem;
+      flex-wrap: wrap;
+      margin-top: auto;
+    }
+    .speaker-topic-tag {
+      font-size: 0.7rem;
+      padding: 0.15rem 0.45rem;
+      border-radius: var(--radius-sm);
+      background: var(--surface-raised);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+    }
+    .speaker-topic-more {
+      font-size: 0.7rem;
+      padding: 0.15rem 0.35rem;
+      color: var(--muted);
+    }
+  </style>
+
+  <script is:inline define:vars={{ search, topicFilter, PAGE_SIZE, totalCount }}>
+    (function () {
+      var searchInput = document.getElementById('speaker-search');
+      var topicSelect = document.getElementById('speaker-topic');
+      var filterBtn = document.getElementById('filter-btn');
+
+      function updateBtn() {
+        var hasSearch = searchInput && searchInput.value.trim().length > 0;
+        var hasTopic = topicSelect && topicSelect.value !== '';
+        filterBtn.disabled = !(hasSearch || hasTopic);
+      }
+
+      if (searchInput) searchInput.addEventListener('input', updateBtn);
+      if (topicSelect) topicSelect.addEventListener('change', updateBtn);
+
+      var grid = document.getElementById('speaker-grid');
+      var sentinel = document.getElementById('scroll-sentinel');
+      if (!grid || !sentinel) return;
+
+      var offset = PAGE_SIZE;
+      var loading = false;
+      var done = offset >= totalCount;
+
+      function escapeHtml(str) {
+        var div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+      }
+
+      function renderCard(sp) {
+        var photoHtml = sp.photo_url
+          ? '<img src="' + escapeHtml(sp.photo_url) + '" alt="" class="speaker-photo" />'
+          : '<div class="speaker-photo-placeholder"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>';
+
+        var titleHtml = sp.title ? '<div class="speaker-card-title">' + escapeHtml(sp.title) + '</div>' : '';
+
+        var vendorLogoHtml = sp.vendor_logo
+          ? '<img src="' + escapeHtml(sp.vendor_logo) + '" alt="" class="speaker-vendor-logo" />'
+          : '<span class="speaker-vendor-dot">' + escapeHtml(sp.vendor_name.charAt(0)) + '</span>';
+
+        var bioHtml = '';
+        if (sp.bio) {
+          var bio = sp.bio.length > 120 ? sp.bio.slice(0, 120) + '...' : sp.bio;
+          bioHtml = '<p class="speaker-card-bio">' + escapeHtml(bio) + '</p>';
+        }
+
+        var topicsHtml = '';
+        if (sp.topics) {
+          var topics = sp.topics.split(',').map(function (t) { return t.trim(); }).filter(Boolean);
+          if (topics.length > 0) {
+            topicsHtml = '<div class="speaker-card-topics">' +
+              topics.slice(0, 4).map(function (t) {
+                return '<span class="speaker-topic-tag">' + escapeHtml(t) + '</span>';
+              }).join('');
+            if (topics.length > 4) topicsHtml += '<span class="speaker-topic-more">+' + (topics.length - 4) + '</span>';
+            topicsHtml += '</div>';
+          }
+        }
+
+        var total = (sp.thumbs_up || 0) + (sp.thumbs_down || 0);
+        var ratingHtml;
+        if (total === 0) {
+          ratingHtml = '<span class="rating-none">No ratings</span>';
+        } else {
+          var score = Math.round(((sp.thumbs_up || 0) / total) * 100);
+          var cls = score >= 50 ? 'positive' : 'negative';
+          var face = score >= 50
+            ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>'
+            : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 16s-1.5-2-4-2-4 2-4 2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>';
+          ratingHtml = '<span class="rating-score ' + cls + '">' + face + ' ' + score + '</span>';
+        }
+
+        var card = document.createElement('a');
+        card.href = '/vendors/' + sp.vendor_id + '/speakers/' + sp.id;
+        card.className = 'speaker-card';
+        card.innerHTML =
+          '<div class="speaker-card-header">' +
+            photoHtml +
+            '<div class="speaker-card-info">' +
+              '<div class="speaker-card-name">' + escapeHtml(sp.name) + '</div>' +
+              titleHtml +
+              '<div class="speaker-card-vendor">' + vendorLogoHtml + ' ' + escapeHtml(sp.vendor_name) + '</div>' +
+            '</div>' +
+            '<div class="speaker-card-score">' + ratingHtml + '</div>' +
+          '</div>' +
+          bioHtml +
+          topicsHtml;
+        return card;
+      }
+
+      function loadMore() {
+        if (loading || done) return;
+        loading = true;
+
+        var params = new URLSearchParams();
+        if (search) params.set('q', search);
+        if (topicFilter) params.set('topic', topicFilter);
+        params.set('limit', String(PAGE_SIZE));
+        params.set('offset', String(offset));
+
+        fetch('/api/speakers/list?' + params.toString())
+          .then(function (res) { return res.json(); })
+          .then(function (speakers) {
+            if (!speakers || speakers.length === 0) {
+              done = true;
+              sentinel.style.display = 'none';
+              return;
+            }
+            speakers.forEach(function (sp) {
+              grid.appendChild(renderCard(sp));
+            });
+            offset += speakers.length;
+            if (offset >= totalCount) {
+              done = true;
+              sentinel.style.display = 'none';
+            }
+            loading = false;
+          })
+          .catch(function () {
+            loading = false;
+          });
+      }
+
+      var observer = new IntersectionObserver(function (entries) {
+        if (entries[0].isIntersecting) loadMore();
+      }, { rootMargin: '200px' });
+
+      observer.observe(sentinel);
+    })();
+  </script>
+</Base>
