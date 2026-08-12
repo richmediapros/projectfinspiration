@@ -1,0 +1,443 @@
+---
+import Base from '../../../../layouts/Base.astro';
+import { isAdmin } from '../../../../lib/auth';
+import { env } from 'cloudflare:workers';
+
+const userIsAdmin = isAdmin(Astro.locals);
+
+const db = env.DB;
+const { id, speakerId } = Astro.params;
+
+interface Vendor { id: string; name: string; }
+const vendor = await db.prepare('SELECT id, name FROM vendors WHERE id = ?').bind(id).first<Vendor>();
+if (!vendor) return new Response('Not found', { status: 404 });
+
+interface Speaker {
+  id: string;
+  vendor_id: string;
+  name: string;
+  title: string | null;
+  email: string | null;
+  phone: string | null;
+  photo_url: string | null;
+  bio: string | null;
+  website: string | null;
+  linkedin: string | null;
+  topics: string | null;
+  active: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+const speaker = await db.prepare('SELECT * FROM speakers WHERE id = ? AND vendor_id = ?').bind(speakerId, id).first<Speaker>();
+if (!speaker) return new Response('Not found', { status: 404 });
+
+interface RatingAgg { rating: string; count: number; }
+const ratingRows = (await db
+  .prepare('SELECT rating, COUNT(*) as count FROM speaker_ratings WHERE speaker_id = ? GROUP BY rating')
+  .bind(speakerId)
+  .all<RatingAgg>()).results;
+
+const ratings = { up: 0, down: 0 };
+for (const r of ratingRows) {
+  if (r.rating === 'up' || r.rating === 'down') ratings[r.rating] = r.count;
+}
+const totalVotes = ratings.up + ratings.down;
+const score = totalVotes > 0 ? Math.round((ratings.up / totalVotes) * 100) : null;
+
+interface UserRating { rating: string; }
+const userRating = Astro.locals.userId
+  ? await db.prepare('SELECT rating FROM speaker_ratings WHERE user_id = ? AND speaker_id = ?')
+      .bind(Astro.locals.userId, speakerId).first<UserRating>()
+  : null;
+
+interface NoteRow {
+  id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  user_name: string;
+  association_name: string | null;
+}
+
+const notes = (await db
+  .prepare(`
+    SELECT sn.id, sn.user_id, sn.content, sn.created_at, u.name as user_name, a.name as association_name
+    FROM speaker_notes sn
+    JOIN users u ON u.id = sn.user_id
+    LEFT JOIN associations a ON a.id = u.association_id
+    WHERE sn.speaker_id = ?
+    ORDER BY sn.created_at DESC
+    LIMIT 50
+  `)
+  .bind(speakerId)
+  .all<NoteRow>()).results;
+
+const topicList = speaker.topics ? speaker.topics.split(',').map((t) => t.trim()).filter(Boolean) : [];
+---
+
+<Base title={`${speaker.name} | ${vendor.name} | TrustConstellation`}>
+  <div class="speaker-detail">
+    <a href={`/vendors/${id}`} class="back-link">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+      Back to {vendor.name}
+    </a>
+
+    <div class="speaker-header">
+      <div class="speaker-header-left">
+        {speaker.photo_url ? (
+          <img src={speaker.photo_url} alt="" class="speaker-photo" />
+        ) : (
+          <div class="speaker-photo-placeholder">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </div>
+        )}
+        <div>
+          <h1>
+            {speaker.name}
+            {speaker.active === 0 && <span class="inactive-badge">Inactive</span>}
+          </h1>
+          {speaker.title && <p class="speaker-title">{speaker.title}</p>}
+          <p class="speaker-vendor">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            <a href={`/vendors/${id}`}>{vendor.name}</a>
+          </p>
+        </div>
+      </div>
+      <div class="speaker-header-actions">
+        <div class="speaker-rating">
+          <div class="rating-score-wrap">
+            {score !== null ? (
+              <span class="rating-score">{score}</span>
+            ) : (
+              <span class="rating-score rating-none">&mdash;</span>
+            )}
+            <span class="rating-label">{score !== null ? `${totalVotes} vote${totalVotes === 1 ? '' : 's'}` : 'No votes'}</span>
+          </div>
+          <div class="rating-faces">
+            <form method="POST" action={`/api/speakers/${speakerId}/rate`}>
+              <input type="hidden" name="rating" value="up" />
+              <button type="submit" class={`rating-face rating-up ${userRating?.rating === 'up' ? 'active-up' : ''}`} title="Recommend">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke="currentColor"/><path d="M8 14s1.5 2 4 2 4-2 4-2" stroke="currentColor"/><line x1="9" y1="9" x2="9.01" y2="9" stroke="currentColor"/><line x1="15" y1="9" x2="15.01" y2="9" stroke="currentColor"/></svg>
+              </button>
+            </form>
+            <form method="POST" action={`/api/speakers/${speakerId}/rate`}>
+              <input type="hidden" name="rating" value="down" />
+              <button type="submit" class={`rating-face rating-down ${userRating?.rating === 'down' ? 'active-down' : ''}`} title="Not recommended">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke="currentColor"/><path d="M16 16s-1.5-2-4-2-4 2-4 2" stroke="currentColor"/><line x1="9" y1="9" x2="9.01" y2="9" stroke="currentColor"/><line x1="15" y1="9" x2="15.01" y2="9" stroke="currentColor"/></svg>
+              </button>
+            </form>
+          </div>
+        </div>
+        {userIsAdmin && (
+          <a href={`/vendors/${id}/speakers/${speakerId}/edit`} class="btn btn-secondary">Edit</a>
+        )}
+      </div>
+    </div>
+
+    <div class="speaker-columns">
+      <div class="speaker-main">
+        {topicList.length > 0 && (
+          <div class="topic-badges">
+            {topicList.map((t) => (
+              <span class="badge badge-neutral">{t}</span>
+            ))}
+          </div>
+        )}
+
+        {speaker.bio && <p class="speaker-bio">{speaker.bio}</p>}
+
+        <!-- Notes -->
+        <div class="section-card">
+          <h2>Notes ({notes.length})</h2>
+          <form method="POST" action={`/api/speakers/${speakerId}/notes`} class="note-form">
+            <textarea name="content" rows="2" placeholder="Share feedback on this speaker..." required></textarea>
+            <button type="submit" class="btn btn-primary btn-sm">Post Note</button>
+          </form>
+          {notes.length > 0 && (
+            <div class="notes-list">
+              {notes.map((n) => (
+                <div class="note">
+                  <div class="note-header">
+                    <span class="note-author">{n.user_name}</span>
+                    {n.association_name && <span class="note-org">{n.association_name}</span>}
+                    <span class="note-date">{new Date(n.created_at + 'Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                    {n.user_id === Astro.locals.userId && (
+                      <form method="POST" action={`/api/speakers/${speakerId}/notes/${n.id}/delete`} class="note-delete-form" data-confirm="This note will be permanently deleted and cannot be recovered." data-confirm-title="Delete this note?" data-confirm-action="Delete Note">
+                        <button type="submit" class="note-delete-btn" title="Delete note">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                        </button>
+                      </form>
+                    )}
+                  </div>
+                  <p class="note-content">{n.content}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div class="speaker-sidebar">
+        <!-- Contact -->
+        {(speaker.email || speaker.phone || speaker.website || speaker.linkedin) && (
+          <div class="section-card">
+            <h2>Contact</h2>
+            {speaker.email && (
+              <div class="contact-line">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                <a href={`mailto:${speaker.email}`}>{speaker.email}</a>
+              </div>
+            )}
+            {speaker.phone && (
+              <div class="contact-line">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>
+                <span>{speaker.phone}</span>
+              </div>
+            )}
+            {speaker.website && (
+              <div class="contact-line">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+                <a href={speaker.website.startsWith('http') ? speaker.website : `https://${speaker.website}`} target="_blank" rel="noopener">{new URL(speaker.website.startsWith('http') ? speaker.website : `https://${speaker.website}`).hostname}</a>
+              </div>
+            )}
+            {speaker.linkedin && (
+              <div class="contact-line">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 016 6v7h-4v-7a2 2 0 00-2-2 2 2 0 00-2 2v7h-4v-7a6 6 0 016-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>
+                <a href={speaker.linkedin.startsWith('http') ? speaker.linkedin : `https://${speaker.linkedin}`} target="_blank" rel="noopener">LinkedIn</a>
+              </div>
+            )}
+          </div>
+        )}
+
+        <!-- Meta -->
+        <div class="section-card meta-card">
+          <div class="meta-line">Added {new Date(speaker.created_at + 'Z').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+      text-decoration: none;
+      margin-bottom: 1rem;
+    }
+    .back-link:hover { color: var(--accent); }
+    .speaker-detail { max-width: 1100px; }
+    .speaker-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+      flex-wrap: wrap;
+    }
+    .speaker-header-left {
+      display: flex;
+      gap: 1rem;
+      align-items: flex-start;
+    }
+    .speaker-photo {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: var(--surface-raised);
+      flex-shrink: 0;
+    }
+    .speaker-photo-placeholder {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: var(--accent-muted);
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .speaker-header h1 {
+      font-size: 1.4rem;
+      margin-bottom: 0.1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .inactive-badge {
+      font-size: 0.65rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      padding: 0.15rem 0.45rem;
+      border-radius: var(--radius-sm);
+      background: var(--surface-raised);
+      color: var(--muted);
+    }
+    .speaker-title {
+      font-size: 0.92rem;
+      color: var(--text-secondary);
+      margin: 0 0 0.2rem;
+    }
+    .speaker-vendor {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.82rem;
+      color: var(--muted);
+      margin: 0;
+    }
+    .speaker-vendor a { color: var(--accent); text-decoration: none; }
+    .speaker-vendor a:hover { text-decoration: underline; }
+    .speaker-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-shrink: 0;
+    }
+    .speaker-rating {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .rating-score-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      line-height: 1;
+    }
+    .rating-score {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .rating-score.rating-none { color: var(--muted); }
+    .rating-label {
+      font-size: 0.68rem;
+      color: var(--muted);
+      margin-top: 0.15rem;
+    }
+    .rating-faces {
+      display: flex;
+      gap: 0.25rem;
+    }
+    .rating-face {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--surface-raised);
+      cursor: pointer;
+      transition: all 0.12s ease;
+      padding: 0;
+    }
+    .rating-face.rating-up { color: var(--success-text, #22c55e); }
+    .rating-face.rating-down { color: var(--error-text, #ef4444); }
+    .rating-face:hover { border-color: var(--border-hover); }
+    .rating-face.active-up {
+      background: var(--success-bg);
+      border-color: var(--success-border);
+      box-shadow: 0 0 0 1px var(--success-border);
+    }
+    .rating-face.active-down {
+      background: var(--error-bg);
+      border-color: var(--error-border);
+      box-shadow: 0 0 0 1px var(--error-border);
+    }
+    .topic-badges {
+      display: flex;
+      gap: 0.25rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.75rem;
+    }
+    .speaker-bio {
+      font-size: 0.92rem;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      margin: 0 0 1rem;
+      white-space: pre-line;
+    }
+    .speaker-columns {
+      display: grid;
+      grid-template-columns: 1fr 300px;
+      gap: 1.25rem;
+      align-items: start;
+    }
+    @media (max-width: 768px) {
+      .speaker-columns { grid-template-columns: 1fr; }
+    }
+    .section-card { margin-bottom: 1rem; }
+    .note-form { margin-bottom: 1rem; }
+    .note-form textarea { margin-bottom: 0.5rem; }
+    .notes-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .note {
+      padding: 0.75rem;
+      background: var(--surface-raised);
+      border-radius: var(--radius-md);
+    }
+    .note-header {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      margin-bottom: 0.35rem;
+      font-size: 0.78rem;
+      flex-wrap: wrap;
+    }
+    .note-author { font-weight: 600; color: var(--text); }
+    .note-org { color: var(--muted); }
+    .note-date { color: var(--muted); margin-left: auto; }
+    .note-delete-form { margin-left: 0.25rem; }
+    .note-delete-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      padding: 0.15rem;
+      border-radius: var(--radius-sm);
+      transition: color 0.12s ease;
+    }
+    .note-delete-btn:hover { color: var(--error-text); }
+    .note-content {
+      font-size: 0.88rem;
+      color: var(--text-secondary);
+      margin: 0;
+      line-height: 1.5;
+    }
+    .contact-line {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.45rem;
+      font-size: 0.88rem;
+      margin-bottom: 0.45rem;
+      line-height: 1.4;
+    }
+    .contact-line:last-child { margin-bottom: 0; }
+    .contact-line svg {
+      flex-shrink: 0;
+      margin-top: 0.15rem;
+      color: var(--muted);
+    }
+    .contact-line a { color: var(--accent); }
+    .meta-card {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    .meta-line { margin-bottom: 0.15rem; }
+  </style>
+</Base>

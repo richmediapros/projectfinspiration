@@ -38,7 +38,14 @@ if (Astro.request.method === 'POST') {
   const action = String(form.get('action') ?? '');
 
   if (action === 'delete') {
+    const speakerIds = (await db.prepare('SELECT id FROM speakers WHERE vendor_id = ?').bind(id).all<{ id: string }>()).results;
+    const speakerCleanup = speakerIds.flatMap((s) => [
+      db.prepare('DELETE FROM speaker_ratings WHERE speaker_id = ?').bind(s.id),
+      db.prepare('DELETE FROM speaker_notes WHERE speaker_id = ?').bind(s.id),
+    ]);
     await db.batch([
+      ...speakerCleanup,
+      db.prepare('DELETE FROM speakers WHERE vendor_id = ?').bind(id),
       db.prepare('DELETE FROM vendor_categories WHERE vendor_id = ?').bind(id),
       db.prepare('DELETE FROM ratings WHERE vendor_id = ?').bind(id),
       db.prepare('DELETE FROM notes WHERE vendor_id = ?').bind(id),
@@ -159,9 +166,9 @@ if (Astro.request.method === 'POST') {
 
   <div class="danger-zone">
     <h3>Danger Zone</h3>
-    <form method="POST" data-confirm="This vendor and all its ratings, notes, and association relationships will be permanently deleted. This cannot be undone." data-confirm-title="Delete this vendor?" data-confirm-action="Delete Vendor">
+    <form method="POST" data-confirm="This vendor and all its speakers, ratings, notes, and association relationships will be permanently deleted. This cannot be undone." data-confirm-title="Delete this vendor?" data-confirm-action="Delete Vendor">
       <input type="hidden" name="action" value="delete" />
-      <p>Permanently delete this vendor, including all ratings, notes, and association relationships.</p>
+      <p>Permanently delete this vendor, including all speakers, ratings, notes, and association relationships.</p>
       <button type="submit" class="btn btn-danger">Delete Vendor</button>
     </form>
   </div>

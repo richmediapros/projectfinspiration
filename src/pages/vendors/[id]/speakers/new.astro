@@ -1,0 +1,84 @@
+---
+import Base from '../../../../layouts/Base.astro';
+import { requireAdmin } from '../../../../lib/auth';
+import { env } from 'cloudflare:workers';
+
+const forbidden = requireAdmin(Astro);
+if (forbidden) return forbidden;
+
+const db = env.DB;
+const { id } = Astro.params;
+
+interface Vendor { id: string; name: string; }
+const vendor = await db.prepare('SELECT id, name FROM vendors WHERE id = ?').bind(id).first<Vendor>();
+if (!vendor) return new Response('Not found', { status: 404 });
+---
+
+<Base title={`Add Speaker | ${vendor.name} | TrustConstellation`}>
+  <div class="page-header">
+    <div class="overline"><a href={`/vendors/${id}`}>{vendor.name}</a></div>
+    <h1>Add Speaker</h1>
+  </div>
+
+  <form method="POST" action={`/api/vendors/${id}/speakers`} class="speaker-form">
+    <div class="form-section">
+      <h3>Speaker Info</h3>
+      <div class="form-row">
+        <div class="form-group" style="flex: 2">
+          <label for="name">Full name <span class="required">*</span></label>
+          <input type="text" id="name" name="name" required autofocus />
+        </div>
+        <div class="form-group" style="flex: 2">
+          <label for="title">Title / Role</label>
+          <input type="text" id="title" name="title" placeholder="e.g. VP of Digital Banking" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="bio">Bio</label>
+        <textarea id="bio" name="bio" rows="3" placeholder="Background, expertise, speaking style..."></textarea>
+      </div>
+      <div class="form-group">
+        <label for="topics">Speaking Topics</label>
+        <input type="text" id="topics" name="topics" placeholder="e.g. Cybersecurity, Digital Transformation, Compliance" />
+        <span class="form-hint">Comma-separated list of topics this speaker covers</span>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h3>Contact & Links</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email" />
+        </div>
+        <div class="form-group" style="max-width: 180px">
+          <label for="phone">Phone</label>
+          <input type="tel" id="phone" name="phone" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="website">Website</label>
+          <input type="url" id="website" name="website" placeholder="https://..." />
+        </div>
+        <div class="form-group">
+          <label for="linkedin">LinkedIn</label>
+          <input type="url" id="linkedin" name="linkedin" placeholder="https://linkedin.com/in/..." />
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="photo_url">Photo URL</label>
+        <input type="url" id="photo_url" name="photo_url" placeholder="https://example.com/headshot.jpg" />
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Add Speaker</button>
+      <a href={`/vendors/${id}`} class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+
+  <style>
+    .speaker-form { max-width: 680px; }
+  </style>
+</Base>

@@ -8,6 +8,7 @@ export type ActivityType =
   | 'user_updated'
   | 'association_created'
   | 'vendor_created'
+  | 'speaker_added'
   | 'access_request';
 
 function getIp(request: Request): string | undefined {
@@ -63,6 +64,7 @@ const TYPE_LABELS: Record<string, string> = {
   user_updated: 'User updated',
   association_created: 'Association created',
   vendor_created: 'Vendor created',
+  speaker_added: 'Speaker added',
   access_request: 'Access requested',
 };
 
